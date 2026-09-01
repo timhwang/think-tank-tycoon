@@ -4,7 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>THINK TANK TYCOON</title>
-<meta name="description" content="Run a DC think tank: hire scholars, mint influence, court donors, win the news cycle. A tabletop-flavored simulator.">
+<meta name="description" content="A strategy game of wealth, power, and terrible ideas. Run a DC think tank: hire scholars, mint influence, court donors, win the news cycle.">
+<meta property="og:title" content="THINK TANK TYCOON">
+<meta property="og:description" content="A Strategy Game of Wealth, Power, and Terrible Ideas.">
+<meta property="og:image" content="https://timhwang.github.io/think-tank-tycoon/og.png">
+<meta property="og:url" content="https://timhwang.github.io/think-tank-tycoon/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://timhwang.github.io/think-tank-tycoon/og.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏛️</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,7 +23,7 @@
 <!-- ================= START SCREEN ================= -->
 <div id="startScreen">
   <div class="bigtitle">THINK TANK TYCOON</div>
-  <div class="subtitle">HIRE SCHOLARS · MINT INFLUENCE · COURT DONORS · WIN THE NEWS CYCLE</div>
+  <div class="subtitle">A STRATEGY GAME OF WEALTH, POWER, AND TERRIBLE IDEAS</div>
   <div class="window" id="startDialog">
     <div class="titlebar">SELECT YOUR INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
     <div id="continueRow"></div>
@@ -43,45 +50,45 @@
 
   <main id="desk">
 
-    <!-- left column: your shop -->
-    <section class="col">
-      <div class="window">
-        <div class="titlebar">STAFF <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody scroll" id="staffBody"></div>
-      </div>
-      <div class="window">
-        <div class="titlebar">PROGRAMS <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody" id="programsBody"></div>
-      </div>
-      <div class="window">
-        <div class="titlebar">YOUR DONORS <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody scroll" id="myDonorsBody"></div>
-      </div>
-    </section>
-
-    <!-- center column: the arena -->
-    <section class="col wide">
+    <!-- top row: the arena and the markets -->
+    <div class="row rowtop">
       <div class="window">
         <div class="titlebar">POLICY FIGHTS <span class="deckcount" id="fightDeckCount"></span><span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
         <div class="wbody tall" id="fightsBody"></div>
       </div>
-      <div class="window" id="bugleWin">
-        <div class="titlebar">☕ THE BELTWAY BUGLE <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody scroll" id="bugleBody"></div>
-      </div>
-    </section>
-
-    <!-- right column: the markets -->
-    <section class="col">
       <div class="window">
         <div class="titlebar">HIRING MARKET <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody scroll" id="hireBody"></div>
+        <div class="wbody tall" id="hireBody"></div>
       </div>
       <div class="window">
         <div class="titlebar">DONOR MARKET <span class="deckcount" id="donorDeckCount"></span><span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody scroll" id="donorMarketBody"></div>
+        <div class="wbody tall" id="donorMarketBody"></div>
       </div>
-    </section>
+    </div>
+
+    <!-- bottom row: your institution and the report -->
+    <div class="row rowbottom">
+      <div class="window">
+        <div class="titlebar">YOUR INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+        <div class="wbody shopgrid">
+          <div class="shopcol"><div class="subdivider">STAFF</div><div id="staffBody"></div></div>
+          <div class="shopcol"><div class="subdivider">PROGRAMS</div><div id="programsBody"></div></div>
+          <div class="shopcol"><div class="subdivider">DONORS</div><div id="myDonorsBody"></div></div>
+        </div>
+      </div>
+      <div class="window">
+        <div class="titlebar">HQ REPORT <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+        <div class="wbody scroll report" id="reportBody"></div>
+      </div>
+    </div>
+
+    <!-- ticker: the paper of record -->
+    <div class="row">
+      <div class="window" id="bugleWin">
+        <div class="titlebar">☕ THE BELTWAY BUGLE <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+        <div class="wbody" id="bugleBody"></div>
+      </div>
+    </div>
 
   </main>
 </div>
@@ -104,7 +111,7 @@
     <ul>
       <li><b>The loop:</b> Scholars produce <b>✦ influence</b> each month. Spend influence on <b>policy fights</b> and on <b>courting donors</b>. Donors pay the bills so you can hire more scholars.</li>
       <li><b>Support:</b> Each ops staffer supports 2 scholars. Unsupported scholars (bottom of the roster) produce at <b>half rate</b>.</li>
-      <li><b>Fights:</b> Commit influence to a side. When the clock hits zero, the bigger pile wins. If your side wins, you get the reward scaled by <b>your share of the winning side's total</b>. Rivals commit every month — watch the bar move.</li>
+      <li><b>Fights:</b> Commit influence to a side. When the clock hits zero, the bigger pile wins. If your side wins, you get the reward scaled by <b>your share of the winning side's total</b>. Rivals commit every month — the ⚑ line under each side shows exactly who's backing it.</li>
       <li><b>Donors:</b> Courting costs influence; grants arrive monthly. Every donor has a <b>demand</b>. Unmet demand = 1 strike per month. Backing positions an ideological donor hates = instant strike. Two strikes and they walk.</li>
       <li><b>Programs:</b> Money sinks (gala, podcast, lobby). Mostly useless for policy — but certain donors won't fund you without them. That's the game.</li>
       <li><b>Losing:</b> End two consecutive months with a negative treasury and the institution folds.</li>

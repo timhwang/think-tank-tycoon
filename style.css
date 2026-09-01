@@ -2,6 +2,8 @@
    THINK TANK TYCOON — SimCity 2000 desktop aesthetic
    Gray beveled windows on a dithered teal desktop, navy titlebars,
    bitmap-ish type, newsprint modal.
+   Layout: top row = fights + hiring + donor markets;
+           bottom row = your institution + HQ report; Bugle ticker below.
    ============================================================ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,6 +94,17 @@ body {
 }
 .deckcount + .widgets { margin-left: 6px; }
 
+/* ---------- icons (pixel art, graceful when missing) ---------- */
+.icon {
+  width: 28px; height: 28px;
+  image-rendering: pixelated;
+  border: 1px solid #00000066;
+  background: #adadad;
+  flex: none;
+}
+.icon.sm { width: 20px; height: 20px; }
+.icon.lg { width: 36px; height: 36px; }
+
 /* ---------- top bar ---------- */
 .topbar {
   position: sticky;
@@ -118,27 +131,35 @@ body {
 .tbval { font-size: 12px; font-weight: bold; }
 .tbspacer { flex: 1; }
 
-/* ---------- layout ---------- */
-#desk {
+/* ---------- layout rows ---------- */
+#desk { padding: 0 6px 40px 6px; }
+.row {
   display: grid;
-  grid-template-columns: 300px minmax(420px, 1fr) 300px;
   gap: 6px;
-  padding: 0 6px 40px 6px;
+  margin-bottom: 6px;
   align-items: start;
 }
-.col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-@media (max-width: 1050px) { #desk { grid-template-columns: 1fr 1fr; } .col.wide { grid-column: 1 / -1; order: -1; } }
-@media (max-width: 720px) { #desk { grid-template-columns: 1fr; } }
+.rowtop { grid-template-columns: minmax(430px, 1.7fr) minmax(250px, 1fr) minmax(250px, 1fr); }
+.rowbottom { grid-template-columns: 2.6fr minmax(260px, 1fr); }
 
-.window { display: flex; flex-direction: column; }
+.window { display: flex; flex-direction: column; min-width: 0; }
 .wbody { padding: 6px; overflow-y: auto; }
 .wbody.scroll { max-height: 380px; }
-.wbody.tall { max-height: 560px; }
+.wbody.tall { max-height: 520px; }
+#bugleWin .wbody { max-height: 150px; }
+
+/* your institution: three internal columns */
+.shopgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.shopcol { min-width: 0; max-height: 330px; overflow-y: auto; padding-right: 2px; }
 
 /* SC2K-ish chunky scrollbars */
-.wbody::-webkit-scrollbar { width: 14px; }
-.wbody::-webkit-scrollbar-track { background: #a8a8a8; border-left: 1px solid var(--win-dk); }
-.wbody::-webkit-scrollbar-thumb {
+.wbody::-webkit-scrollbar, .shopcol::-webkit-scrollbar { width: 14px; }
+.wbody::-webkit-scrollbar-track, .shopcol::-webkit-scrollbar-track { background: #a8a8a8; border-left: 1px solid var(--win-dk); }
+.wbody::-webkit-scrollbar-thumb, .shopcol::-webkit-scrollbar-thumb {
   background: var(--win);
   border-top: 2px solid var(--win-lt); border-left: 2px solid var(--win-lt);
   border-right: 2px solid var(--win-dkr); border-bottom: 2px solid var(--win-dkr);
@@ -171,17 +192,21 @@ body {
 .lean.r1 { background: #c05050; }
 .lean.r2 { background: #9b1414; }
 
-/* ---------- people & programs ---------- */
+/* ---------- people & programs (icon + content) ---------- */
 .person, .program {
   padding: 5px 6px;
   margin-bottom: 5px;
   background: #cccccc;
   border: 1px solid var(--win-dk);
   border-left: 3px solid var(--win-dk);
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
 }
 .person.unsup { border-left-color: #a00000; background: #d4c2c2; }
 .program.on { border-left-color: #045f04; background: #c2d4c2; }
 .person.donor { border-left-color: var(--gold); }
+.pcontent { flex: 1; min-width: 0; }
 .pline { margin: 1px 0; }
 .quirk { font-style: italic; color: #3a3a3a; font-size: 10px; }
 .subdivider {
@@ -192,6 +217,7 @@ body {
   border-bottom: 1px solid var(--win-dk);
   margin: 8px 0 5px 0;
 }
+.shopcol > .subdivider:first-child, .report .subdivider:first-of-type { margin-top: 0; }
 
 /* ---------- cards ---------- */
 .card { margin-bottom: 6px; }
@@ -201,11 +227,16 @@ body {
   font-weight: bold;
   font-size: 11px;
   padding: 3px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .cardhead.small { font-size: 10px; }
 .cardhead.fight { background: linear-gradient(90deg, #24243a, #3a3a6a); }
 .cardbody { padding: 6px; }
 .cardbody .btn { margin-top: 4px; }
+.mrow { display: flex; gap: 7px; align-items: flex-start; }
+.mcontent { flex: 1; min-width: 0; }
 
 .hirecard { background: #cbc7bb; }
 .hirecard.ops { background: #bbc3cb; }
@@ -214,7 +245,7 @@ body {
 /* ---------- fights ---------- */
 .fightcard { background: #c7c7ce; }
 .fightmeta { margin-bottom: 5px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
-.ftype { font-family: 'Silkscreen', Verdana, sans-serif; font-size: 8px; padding: 1px 4px; background: #fff; color: #000; margin-right: 4px; }
+.ftype { font-family: 'Silkscreen', Verdana, sans-serif; font-size: 8px; padding: 1px 4px; background: #fff; color: #000; flex: none; }
 .ftype.EO { background: #ffd98a; }
 .ftype.NOM { background: #b9d7ff; }
 
@@ -233,12 +264,17 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 0;
+  padding: 2px 0 0 0;
   flex-wrap: wrap;
 }
 .sidelabel { flex: 1 1 55%; min-width: 180px; }
 .sidenums { font-weight: bold; white-space: nowrap; }
 .sidebtns { display: flex; gap: 3px; }
+.backers { font-size: 9px; margin: 0 0 5px 14px; }
+
+/* ---------- HQ report ---------- */
+.report .pline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.report .icon.sm { width: 16px; height: 16px; }
 
 /* ---------- bugle log ---------- */
 #bugleWin .wbody { background: var(--paper); font-family: Georgia, 'Times New Roman', serif; }
@@ -346,3 +382,16 @@ body {
 }
 #helpWin .wbody { max-height: 60vh; }
 #helpWin li { margin: 5px 0 5px 16px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1150px) {
+  .rowtop { grid-template-columns: 1fr 1fr; }
+  .rowtop .window:first-child { grid-column: 1 / -1; }
+  .rowbottom { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .rowtop { grid-template-columns: 1fr; }
+  .rowtop .window:first-child { grid-column: auto; }
+  .shopgrid { grid-template-columns: 1fr; }
+  .shopcol { max-height: none; }
+}

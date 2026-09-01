@@ -15,7 +15,7 @@ function fmtMoney(n) {
   if (abs >= 1000) return sign + '$' + (abs / 1000).toFixed(2).replace(/0$/, '').replace(/\.0$/, '') + 'M';
   return sign + '$' + abs + 'k';
 }
-const fmtSigned = n => (n >= 0 ? '+' : '−') + fmtMoney(Math.abs(n)).replace('$', '$');
+const fmtSigned = n => (n >= 0 ? '+' : '−') + fmtMoney(Math.abs(n));
 
 function dateStr(m) {
   const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -30,6 +30,11 @@ function leanChip(lean) {
   return '<span class="lean c0">● CENTER</span>';
 }
 const tagChip = t => `<span class="tag tag-${t}" title="${TAG_NAMES[t]}">${t}</span>`;
+
+// icon slot: renders nothing visible if the PNG doesn't exist yet
+const iconImg = (name, size) => name
+  ? `<img class="icon${size ? ' ' + size : ''}" src="icons/${name}.png" alt="" onerror="this.remove()">`
+  : '';
 
 // ---------- state ----------
 let G = null;
@@ -53,14 +58,17 @@ function genScholar(starter) {
     id: uid++, kind: 'scholar', name, big,
     tag: pick(TAGS), salary: salary + (big ? 15 : 0), out,
     quirk: pick(SCHOLAR_QUIRKS),
+    icon: 'scholar_' + ri(1, 12),
   };
 }
 
 function genOps() {
+  const rIdx = Math.floor(Math.random() * OPS_ROLES.length);
   return {
     id: uid++, kind: 'ops', name: genName(false),
-    role: pick(OPS_ROLES), salary: ri(7, 12), supports: TUNE.supportRatio,
+    role: OPS_ROLES[rIdx], salary: ri(7, 12), supports: TUNE.supportRatio,
     quirk: pick(OPS_QUIRKS),
+    icon: 'ops_' + (rIdx + 1),
   };
 }
 
@@ -88,7 +96,7 @@ function drawFight() {
     defId, type: def.type, tag: def.tag, reward: def.reward,
     title: def.title.replace('{NOM}', genName(true)),
     monthsLeft: def.months,
-    sides: def.sides.map(s => ({ label: s.label, lean: s.lean, total: 0, yours: 0 })),
+    sides: def.sides.map(s => ({ label: s.label, lean: s.lean, total: 0, yours: 0, rivals: {} })),
     rivalPicks: {}, crossed: {},
   });
 }
@@ -146,13 +154,20 @@ function production() {
   return sum;
 }
 
-function monthlyCosts() {
-  let c = tank().rent;
+function payrollCost() {
+  let c = 0;
   G.scholars.forEach(s => c += s.salary);
   G.ops.forEach(o => c += o.salary);
+  return c;
+}
+
+function programsCost() {
+  let c = 0;
   PROGRAMS.forEach(p => { if (G.programs[p.id]) c += p.cost; });
   return c;
 }
+
+function monthlyCosts() { return tank().rent + payrollCost() + programsCost(); }
 
 function monthlyGrants() { return G.donors.reduce((a, d) => a + d.grant, 0); }
 
@@ -284,7 +299,12 @@ function rivalCommits() {
     const wSum = targets.reduce((a, t) => a + t.w, 0);
     targets.forEach(t => {
       const amt = Math.floor(budget * t.w / wSum);
-      if (amt > 0) t.f.sides[t.sideIdx].total += amt;
+      if (amt > 0) {
+        const s = t.f.sides[t.sideIdx];
+        s.total += amt;
+        s.rivals = s.rivals || {};
+        s.rivals[r.short] = (s.rivals[r.short] || 0) + amt;
+      }
     });
   });
 }
@@ -437,7 +457,7 @@ function renderStart() {
     ? `<button class="btn big" data-act="continue">▶ Resume Saved Game</button>` : '';
   $('#tankPicker').innerHTML = TANKS.map(t => `
     <div class="card tankcard">
-      <div class="cardhead">${t.name}</div>
+      <div class="cardhead">${iconImg('tank_' + t.id, 'lg')}<span>${t.name}</span></div>
       <div class="cardbody">
         <div class="tankmeta">${leanChip(t.align)} <span class="chip">${t.size}</span> <span class="chip">${t.diff}</span></div>
         <div class="motto">“${t.motto}”</div>
@@ -461,13 +481,14 @@ function render() {
   $('#tbInf').innerHTML = `✦ ${G.influence} <span class="dim">(+${production()}/mo)</span>`;
   $('#tbStaff').textContent = `${G.scholars.length} scholars / ${cap} supported`;
 
+  renderFights();
+  renderHireMarket();
+  renderDonorMarket();
   renderStaff(cap);
   renderPrograms();
   renderMyDonors();
-  renderFights();
+  renderReport();
   renderBugle();
-  renderHireMarket();
-  renderDonorMarket();
 }
 
 function renderStaff(cap) {
@@ -476,13 +497,16 @@ function renderStaff(cap) {
     const supported = i < cap;
     rows.push(`
       <div class="person ${supported ? '' : 'unsup'}">
-        <div class="pline">
-          <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)}
-          ${supported ? '' : '<span class="warn" title="No ops support — producing at half rate">⚠ half rate</span>'}
+        ${iconImg(s.icon)}
+        <div class="pcontent">
+          <div class="pline">
+            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)}
+            ${supported ? '' : '<span class="warn" title="No ops support — producing at half rate">⚠ half rate</span>'}
+          </div>
+          <div class="pline dim">✦ ${supported ? s.out : Math.floor(s.out * TUNE.unsupportedMult)}/mo · ${fmtMoney(s.salary)}/mo</div>
+          <div class="pline quirk">${s.quirk}</div>
+          <button class="btn tiny" data-act="fire" data-kind="scholar" data-id="${s.id}">Let Go</button>
         </div>
-        <div class="pline dim">${TAG_NAMES[s.tag]} · ✦ ${supported ? s.out : Math.floor(s.out * TUNE.unsupportedMult)}/mo · ${fmtMoney(s.salary)}/mo</div>
-        <div class="pline quirk">${s.quirk}</div>
-        <button class="btn tiny" data-act="fire" data-kind="scholar" data-id="${s.id}">Let Go</button>
       </div>`);
   });
   if (!G.scholars.length) rows.push('<div class="empty">No scholars. No scholars, no influence.</div>');
@@ -490,10 +514,13 @@ function renderStaff(cap) {
   G.ops.forEach(o => {
     rows.push(`
       <div class="person">
-        <div class="pline"><b>${o.name}</b> <span class="chip">${o.role}</span></div>
-        <div class="pline dim">Supports ${o.supports} scholars · ${fmtMoney(o.salary)}/mo</div>
-        <div class="pline quirk">${o.quirk}</div>
-        <button class="btn tiny" data-act="fire" data-kind="ops" data-id="${o.id}">Let Go</button>
+        ${iconImg(o.icon)}
+        <div class="pcontent">
+          <div class="pline"><b>${o.name}</b></div>
+          <div class="pline dim">${o.role} · supports ${o.supports} · ${fmtMoney(o.salary)}/mo</div>
+          <div class="pline quirk">${o.quirk}</div>
+          <button class="btn tiny" data-act="fire" data-kind="ops" data-id="${o.id}">Let Go</button>
+        </div>
       </div>`);
   });
   if (!G.ops.length) rows.push('<div class="empty">No ops staff. Scholars are wandering the halls unsupported.</div>');
@@ -506,10 +533,13 @@ function renderPrograms() {
     const wanted = G.donors.some(d => d.demand.type === 'PROGRAM' && d.demand.pid === p.id);
     return `
       <div class="program ${on ? 'on' : ''}">
-        <div class="pline"><b>${p.name}</b> ${on ? '<span class="chip on">RUNNING</span>' : ''} ${wanted ? '<span class="chip want" title="A current donor demands this">DONOR BAIT</span>' : ''}</div>
-        <div class="pline dim">${fmtMoney(p.cost)}/mo${p.inf ? ` · ✦ +${p.inf}/mo` : ' · produces nothing'}</div>
-        <div class="pline quirk">${p.blurb}</div>
-        <button class="btn tiny" data-act="prog" data-id="${p.id}">${on ? 'Shut Down' : 'Launch'}</button>
+        ${iconImg('program_' + p.id)}
+        <div class="pcontent">
+          <div class="pline"><b>${p.name}</b> ${on ? '<span class="chip on">RUNNING</span>' : ''} ${wanted ? '<span class="chip want" title="A current donor demands this">DONOR BAIT</span>' : ''}</div>
+          <div class="pline dim">${fmtMoney(p.cost)}/mo${p.inf ? ` · ✦ +${p.inf}/mo` : ' · produces nothing'}</div>
+          <div class="pline quirk">${p.blurb}</div>
+          <button class="btn tiny" data-act="prog" data-id="${p.id}">${on ? 'Shut Down' : 'Launch'}</button>
+        </div>
       </div>`;
   }).join('');
 }
@@ -519,14 +549,28 @@ function renderMyDonors() {
     const met = demandMet(d);
     return `
       <div class="person donor">
-        <div class="pline"><b>${d.name}</b> ${leanChip(d.lean)}</div>
-        <div class="pline dim">${fmtMoney(d.grant)}/mo</div>
-        <div class="pline ${met ? 'ok' : 'warn'}">${met ? '✓' : '✗'} ${demandText(d)}</div>
-        <div class="pline dim">Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, TUNE.strikeLimit - d.strikes))}${d.strikes === TUNE.strikeLimit - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>
-        <button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>
+        ${iconImg('donor_' + d.id)}
+        <div class="pcontent">
+          <div class="pline"><b>${d.name}</b> ${leanChip(d.lean)}</div>
+          <div class="pline dim">${fmtMoney(d.grant)}/mo</div>
+          <div class="pline ${met ? 'ok' : 'warn'}">${met ? '✓' : '✗'} ${demandText(d)}</div>
+          <div class="pline dim">Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, TUNE.strikeLimit - d.strikes))}${d.strikes === TUNE.strikeLimit - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>
+          <button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>
+        </div>
       </div>`;
   });
   $('#myDonorsBody').innerHTML = rows.join('') || '<div class="empty">No funders. The treasury drains.</div>';
+}
+
+// who's behind each side of a fight, sorted big to small
+function backersText(s) {
+  const entries = Object.entries(s.rivals || {}).sort((x, y) => y[1] - x[1]);
+  const parts = entries.map(([n, v]) => `${n} ${v}`);
+  const attributed = entries.reduce((a, e) => a + e[1], 0);
+  const other = s.total - s.yours - attributed;
+  if (other > 0) parts.push(`Others ${other}`);
+  if (s.yours > 0) parts.unshift(`<b>You ${s.yours}</b>`);
+  return parts.length ? '⚑ ' + parts.join(' · ') : '⚑ no backers yet';
 }
 
 function renderFights() {
@@ -536,25 +580,56 @@ function renderFights() {
     const pctA = total === 0 ? 50 : Math.max(4, Math.min(96, Math.round(a.total / total * 100)));
     return `
       <div class="card fightcard">
-        <div class="cardhead fight">
-          <span class="ftype ${f.type}">${f.type}</span> ${f.title}
-        </div>
+        <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
           <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold">🏆 ${fmtMoney(f.reward)}</span></div>
           <div class="tug"><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
               <span class="sidelabel">${si === 0 ? '◤' : '◢'} ${s.label} ${leanChip(s.lean)}</span>
-              <span class="sidenums">${s.total} <span class="dim">(you ${s.yours})</span></span>
+              <span class="sidenums">${s.total}</span>
               <span class="sidebtns">
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="5">+5</button>
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="25">+25</button>
               </span>
-            </div>`).join('')}
+            </div>
+            <div class="backers dim">${backersText(s)}</div>`).join('')}
         </div>
       </div>`;
   }).join('');
   $('#fightDeckCount').textContent = `DECK: ${G.fightDeck.length}`;
+}
+
+function renderReport() {
+  const s = G.stats;
+  const grants = monthlyGrants(), payroll = payrollCost(), rent = tank().rent, prog = programsCost();
+  const net = grants - payroll - rent - prog;
+  const winRate = (s.won + s.lost) ? Math.round(s.won / (s.won + s.lost) * 100) + '%' : '—';
+  const cap = supportCap();
+  const rivalRows = G.rivals.map(r =>
+    `<div class="pline">${iconImg('tank_' + tankIdByShort(r.short), 'sm')}<b>${r.short}</b> ${leanChip(r.align)} <span class="dim">✦ ~${r.budget}/mo · ${r.tags.join(' ')}</span></div>`).join('');
+  $('#reportBody').innerHTML = `
+    <div class="pline"><b>${tank().name}</b></div>
+    <div class="pline quirk">“${tank().motto}”</div>
+    <div class="subdivider">RECORD</div>
+    <div class="pline">${s.months} months · ${s.won}W–${s.lost}L fights <span class="dim">(win rate ${winRate})</span></div>
+    <div class="pline">Peak treasury: ${fmtMoney(s.peakCash)}</div>
+    <div class="subdivider">MONTHLY LEDGER</div>
+    <div class="pline ok">Grants ...... ${fmtSigned(grants)}</div>
+    <div class="pline">Payroll ..... ${fmtSigned(-payroll)}</div>
+    <div class="pline">Rent ........ ${fmtSigned(-rent)}</div>
+    <div class="pline">Programs .... ${fmtSigned(-prog)}</div>
+    <div class="pline ${net < 0 ? 'warn' : 'ok'}"><b>Net ......... ${fmtSigned(net)}</b></div>
+    <div class="subdivider">INFLUENCE</div>
+    <div class="pline">Banked ✦ ${G.influence} · producing +${production()}/mo</div>
+    <div class="pline dim">${Math.min(G.scholars.length, cap)}/${G.scholars.length} scholars supported</div>
+    <div class="subdivider">THE OPPOSITION</div>
+    ${rivalRows}`;
+}
+
+function tankIdByShort(short) {
+  const t = TANKS.find(x => x.short === short) || NPC_TANKS.find(x => x.short === short);
+  return t ? t.id : 'bland';
 }
 
 function renderBugle() {
@@ -569,22 +644,28 @@ function renderHireMarket() {
       return `
         <div class="card hirecard">
           <div class="cardhead small">${h.name}${h.big ? ' ★' : ''}</div>
-          <div class="cardbody">
-            <div class="pline">${tagChip(h.tag)} <span class="dim">${TAG_NAMES[h.tag]}</span></div>
-            <div class="pline">✦ ${h.out}/mo · ${fmtMoney(h.salary)}/mo</div>
-            <div class="pline quirk">${h.quirk}</div>
-            <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(h.salary * TUNE.signingMonths)} bonus)</button>
+          <div class="cardbody mrow">
+            ${iconImg(h.icon)}
+            <div class="mcontent">
+              <div class="pline">${tagChip(h.tag)} <span class="dim">${TAG_NAMES[h.tag]}</span></div>
+              <div class="pline">✦ ${h.out}/mo · ${fmtMoney(h.salary)}/mo</div>
+              <div class="pline quirk">${h.quirk}</div>
+              <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(h.salary * TUNE.signingMonths)} bonus)</button>
+            </div>
           </div>
         </div>`;
     }
     return `
       <div class="card hirecard ops">
         <div class="cardhead small">${h.name}</div>
-        <div class="cardbody">
-          <div class="pline"><span class="chip">OPS</span> <span class="dim">${h.role}</span></div>
-          <div class="pline">Supports ${h.supports} scholars · ${fmtMoney(h.salary)}/mo</div>
-          <div class="pline quirk">${h.quirk}</div>
-          <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(h.salary * TUNE.signingMonths)} bonus)</button>
+        <div class="cardbody mrow">
+          ${iconImg(h.icon)}
+          <div class="mcontent">
+            <div class="pline"><span class="chip">OPS</span> <span class="dim">${h.role}</span></div>
+            <div class="pline">Supports ${h.supports} scholars · ${fmtMoney(h.salary)}/mo</div>
+            <div class="pline quirk">${h.quirk}</div>
+            <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(h.salary * TUNE.signingMonths)} bonus)</button>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -594,11 +675,14 @@ function renderDonorMarket() {
   $('#donorMarketBody').innerHTML = G.donorMarket.map((d, i) => `
     <div class="card hirecard donor">
       <div class="cardhead small">${d.name}</div>
-      <div class="cardbody">
-        <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b></div>
-        <div class="pline warn">Demands: ${demandText(d)}</div>
-        <div class="pline quirk">${d.blurb}</div>
-        <button class="btn tiny" data-act="court" data-idx="${i}" ${G.influence < d.cost ? 'disabled' : ''}>Court (✦ ${d.cost})</button>
+      <div class="cardbody mrow">
+        ${iconImg('donor_' + d.id)}
+        <div class="mcontent">
+          <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b></div>
+          <div class="pline warn">Demands: ${demandText(d)}</div>
+          <div class="pline quirk">${d.blurb}</div>
+          <button class="btn tiny" data-act="court" data-idx="${i}" ${G.influence < d.cost ? 'disabled' : ''}>Court (✦ ${d.cost})</button>
+        </div>
       </div>
     </div>`).join('');
   $('#donorDeckCount').textContent = `DECK: ${G.donorDeck.length}`;
@@ -615,7 +699,7 @@ document.addEventListener('click', e => {
   else if (act === 'hire') actHire(+b.dataset.idx);
   else if (act === 'fire') actFire(b.dataset.kind, +b.dataset.id);
   else if (act === 'court') actCourt(+b.dataset.idx);
-  else if (act === 'drop') actDrop(+b.dataset.id);
+  else if (act === 'drop') actDrop(b.dataset.id);
   else if (act === 'prog') actProgram(b.dataset.id);
   else if (act === 'commit') actCommit(+b.dataset.f, +b.dataset.s, +b.dataset.amt);
   else if (act === 'closepaper') $('#paper').classList.add('hidden');
