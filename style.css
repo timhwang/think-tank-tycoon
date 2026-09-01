@@ -176,6 +176,7 @@ body {
 .chip.on { background: #7fbf7f; border-color: #045f04; }
 .chip.want { background: #e8d47a; border-color: var(--gold); }
 .chip.gold { background: #e8d47a; border-color: var(--gold); font-weight: bold; }
+.chip.raid { background: #d4a0a0; border-color: #7a2020; font-weight: bold; }
 
 .tag { display: inline-block; font-size: 9px; font-weight: bold; color: #fff; padding: 0 4px; border: 1px solid #0006; }
 .tag-TAX { background: #8a6d00; }
@@ -272,6 +273,12 @@ body {
 .sidebtns { display: flex; gap: 3px; }
 .backers { font-size: 9px; margin: 0 0 5px 14px; }
 
+/* ---------- ledger table ---------- */
+.ledger { width: 100%; border-collapse: collapse; font-size: 11px; }
+.ledger td { padding: 2px 2px; border-bottom: 1px dotted #999; }
+.ledger td.amt { text-align: right; font-weight: bold; white-space: nowrap; }
+.ledger tr.net td { border-top: 2px solid var(--win-dk); border-bottom: none; font-weight: bold; }
+
 /* ---------- HQ report ---------- */
 .report .pline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .report .icon.sm { width: 16px; height: 16px; }
@@ -300,7 +307,9 @@ body {
   text-align: center;
 }
 #startDialog { max-width: 1080px; width: 100%; }
-#continueRow { text-align: center; margin: 10px 0 4px 0; }
+#resumeBox { max-width: 1080px; width: 100%; margin-top: 10px; }
+#continueRow { text-align: center; margin: 10px 0; }
+.expnote { margin-bottom: 4px; }
 #tankPicker {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

@@ -26,10 +26,13 @@
   <div class="subtitle">A STRATEGY GAME OF WEALTH, POWER, AND TERRIBLE IDEAS</div>
   <div class="window" id="startDialog">
     <div class="titlebar">SELECT YOUR INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-    <div id="continueRow"></div>
     <div id="tankPicker"></div>
   </div>
-  <div class="credits">© 1996 BELTWAY INTERACTIVE · ALL INSTITUTIONS FICTIONAL · ANY RESEMBLANCE IS A CONVENING</div>
+  <div class="window hidden" id="resumeBox">
+    <div class="titlebar">SAVED GAME <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+    <div id="continueRow"></div>
+  </div>
+  <div class="credits">© 2026 TIM HWANG AND ZACH GRAVES · ALL INSTITUTIONS FICTIONAL · ANY RESEMBLANCE IS A CONVENING</div>
 </div>
 
 <!-- ================= GAME SCREEN ================= -->
@@ -110,11 +113,13 @@
   <div class="wbody">
     <ul>
       <li><b>The loop:</b> Scholars produce <b>✦ influence</b> each month. Spend influence on <b>policy fights</b> and on <b>courting donors</b>. Donors pay the bills so you can hire more scholars.</li>
-      <li><b>Support:</b> Each ops staffer supports 2 scholars. Unsupported scholars (bottom of the roster) produce at <b>half rate</b>.</li>
+      <li><b>Support:</b> Each ops staffer supports 2 scholars. Unsupported scholars (bottom of the roster) produce at <b>half rate</b> — and quit after 2 straight unsupported months.</li>
+      <li><b>Raids:</b> Candidates marked <b>AT [RIVAL]</b> currently work for the competition. Hiring one costs a 1.5× signing bonus and permanently dents that rival's monthly influence budget.</li>
       <li><b>Fights:</b> Commit influence to a side. When the clock hits zero, the bigger pile wins. If your side wins, you get the reward scaled by <b>your share of the winning side's total</b> — cash, clout (✦), and sometimes a free scholar, a warm donor intro, or donor amnesty. Rivals commit every month — the ⚑ line under each side shows exactly who's backing it.</li>
       <li><b>Expertise:</b> Every scholar whose tag matches a fight amplifies influence you commit there by +10% (max +50%) — shown as the ★ chip on the card.</li>
       <li><b>Partisan fit:</b> Donors and scholars who share your institution's politics are cheaper to court and hire (▼); crossing the aisle costs a premium (▲).</li>
-      <li><b>Donors:</b> Courting costs influence; grants arrive monthly. Every donor has a <b>demand</b> — a scholar on the roster, a vanity program, monthly influence pushed into their pet issue, or ideological purity (backing a side they hate = instant strike). Unmet demand = 1 strike per month. Two strikes and they walk.</li>
+      <li><b>Donors:</b> Courting costs influence; grants arrive monthly. Every donor has a <b>demand</b> — a scholar on the roster, a vanity program, monthly influence pushed into their pet issue, or ideological purity (backing a side they hate = instant strike). Unmet demand = 1 strike per month. Two strikes and they walk. Grants also run on <b>cycles</b> (12–24 months) — when one ends the donor departs amicably, so keep courting.</li>
+      <li><b>Payroll creep:</b> Every December, everyone gets a raise (+8%). Standing still is a slow way to lose.</li>
       <li><b>Programs:</b> Money sinks (gala, podcast, lobby). Mostly useless for policy — but certain donors won't fund you without them. That's the game.</li>
       <li><b>Losing:</b> End two consecutive months with a negative treasury and the institution folds.</li>
     </ul>

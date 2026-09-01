@@ -19,6 +19,19 @@ const TUNE = {
   hireOpposeMult: 1.5,   // ...and when they cross the aisle to join you
   donorMatchMult: 0.7,   // court cost mult when a donor shares your lean
   donorOpposeMult: 1.4,  // ...and when they don't
+  raidChance: 0.22,      // odds a market scholar is poachable from a rival
+  raidBonusMult: 1.5,    // signing-bonus premium to raid a rival's scholar
+  raidBudgetHit: 3,      // rival influence budget lost per poached scholar
+  raidMinBudget: 6,      // raids can't reduce a rival below this
+  scholarStrikeLimit: 2, // consecutive unsupported months before a scholar quits
+  annualRaisePct: 0.09,  // payroll raise applied every 12 months
+  grantTermMin: 10,      // donor grant cycles run this many months...
+  grantTermMax: 20,      // ...to this many, then the donor departs amicably
+  grantMult: 0.8,        // global scaler on donor grants (applied when courted)
+  fightCashMult: 0.7,    // global scaler on fight cash rewards (applied at draw)
+  rivalBudgetMult: 1.8,  // global scaler on rival influence budgets
+  courtCostMult: 1.5,    // global scaler on donor courting costs
+  scholarOutMult: 0.85,  // global scaler on scholar influence output
   startYear: 2027,
 };
 
@@ -42,7 +55,7 @@ const TANKS = [
     motto:'Quality. Independence. Impact. Parking Validation.',
     align:-1, alignLabel:'Center-Left', size:'LARGE', diff:'Comfy',
     blurb:'The establishment. A marble building full of former officials waiting to become current officials again.',
-    cash:2400, rent:80, scholars:5, ops:2, influence:20,
+    cash:2400, rent:80, scholars:4, ops:2, influence:20,
     donors:['waterworks','tomorrow'], budget:45, tags:['TAX','HLTH','TRADE'],
   },
   {
@@ -50,7 +63,7 @@ const TANKS = [
     motto:'Building an America the Founders Would Recognize, Legally.',
     align:2, alignLabel:'Right', size:'LARGE', diff:'Comfy',
     blurb:'A battleship with a gift shop. Twelve field marshals of the culture war and a truly excellent mailing list.',
-    cash:2200, rent:70, scholars:5, ops:2, influence:20,
+    cash:2200, rent:70, scholars:4, ops:2, influence:20,
     donors:['pemberton','hexagon'], budget:45, tags:['TAX','DEF','CLIM'],
   },
   {
@@ -58,7 +71,7 @@ const TANKS = [
     motto:'Markets Have Feelings Too.',
     align:1, alignLabel:'Center-Right', size:'MEDIUM', diff:'Standard',
     blurb:'Tweedy, respectable, pro-business. Hosts the politest disagreements in town, with sandwiches.',
-    cash:1000, rent:45, scholars:3, ops:1, influence:25,
+    cash:1000, rent:45, scholars:3, ops:2, influence:25,
     donors:['retail'], budget:30, tags:['TAX','TRADE','TECH'],
   },
   {
@@ -66,7 +79,7 @@ const TANKS = [
     motto:'The Arc of History Needs a Push.',
     align:-2, alignLabel:'Left', size:'MEDIUM', diff:'Standard',
     blurb:'Runs on cold brew and five-point plans. Everyone on staff is either 29 or 63.',
-    cash:900, rent:45, scholars:3, ops:1, influence:25,
+    cash:900, rent:45, scholars:3, ops:2, influence:25,
     donors:['billionaires'], budget:30, tags:['HLTH','CLIM','TECH'],
   },
   {
@@ -82,7 +95,7 @@ const TANKS = [
     motto:'Small Is Beautiful. So Is Our Budget.',
     align:0, alignLabel:'Post-Liberal', size:'TINY', diff:'Hard Mode',
     blurb:'Three converts and a fax machine, arguing that everything went wrong in 1789.',
-    cash:300, rent:15, scholars:1, ops:1, influence:35,
+    cash:340, rent:15, scholars:1, ops:1, influence:50,
     donors:[], budget:10, tags:['HLTH','TECH'],
   },
 ];

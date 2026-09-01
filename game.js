@@ -50,7 +50,7 @@ function genName(fancy) {
 
 function genScholar(starter) {
   const salary = starter ? ri(16, 30) : ri(14, 42);
-  let out = Math.round(salary * 0.45) + ri(0, 8);
+  let out = Math.round((salary * 0.45 + ri(0, 8)) * TUNE.scholarOutMult);
   let name = genName(Math.random() < 0.75);
   let big = false;
   if (!starter && Math.random() < 0.12) { big = true; out += 10; }
@@ -59,12 +59,19 @@ function genScholar(starter) {
   const r = Math.random();
   const lean = starter ? ((tSign !== 0 && r < 0.6) ? tSign : 0)
                        : (r < 0.3 ? -1 : r < 0.7 ? 0 : 1);
-  return {
+  const sch = {
     id: uid++, kind: 'scholar', name, big, lean,
     tag: pick(TAGS), salary: salary + (big ? 15 : 0), out,
     quirk: pick(SCHOLAR_QUIRKS),
     icon: 'scholar_' + ri(1, 12),
   };
+  // some market scholars are sitting at a rival right now — hiring is a raid
+  if (!starter && G && G.rivals && G.rivals.length && Math.random() < TUNE.raidChance) {
+    sch.from = pick(G.rivals).short;
+    sch.out += 4;    // proven operator
+    sch.salary += 6; // knows it
+  }
+  return sch;
 }
 
 function genOps() {
@@ -78,16 +85,22 @@ function genOps() {
 }
 
 function buildRivals(chosenId) {
-  const rivals = TANKS.filter(t => t.id !== chosenId).map(t => ({
-    short: t.short, name: t.name, align: t.align, budget: t.budget, tags: t.tags,
-  }));
-  NPC_TANKS.forEach(t => rivals.push({ short: t.short, name: t.name, align: t.align, budget: t.budget, tags: t.tags }));
+  const mk = t => ({
+    short: t.short, name: t.name, align: t.align,
+    budget: Math.round(t.budget * TUNE.rivalBudgetMult), tags: t.tags,
+  });
+  const rivals = TANKS.filter(t => t.id !== chosenId).map(mk);
+  NPC_TANKS.forEach(t => rivals.push(mk(t)));
   return rivals;
 }
 
 function mkDonorInstance(defId) {
   const d = DONORS.find(x => x.id === defId);
-  return { ...d, demand: { ...d.demand }, strikes: 0, joined: G ? G.month : 0 };
+  return {
+    ...d, demand: { ...d.demand }, strikes: 0, joined: G ? G.month : 0,
+    grant: Math.round(d.grant * TUNE.grantMult),
+    term: ri(TUNE.grantTermMin, TUNE.grantTermMax),
+  };
 }
 
 function drawFight() {
@@ -97,8 +110,10 @@ function drawFight() {
   }
   const defId = G.fightDeck.pop();
   const def = FIGHTS.find(f => f.id === defId);
+  const r = def.reward;
   G.fights.push({
-    defId, type: def.type, tag: def.tag, reward: def.reward,
+    defId, type: def.type, tag: def.tag,
+    reward: { cash: Math.round((r.cash || 0) * TUNE.fightCashMult), inf: r.inf || 0, special: r.special || null },
     title: def.title.replace('{NOM}', genName(true)),
     monthsLeft: def.months,
     sides: def.sides.map(s => ({ label: s.label, lean: s.lean, total: 0, yours: 0, rivals: {} })),
@@ -217,13 +232,15 @@ function fitMult(lean, matchMult, opposeMult) {
 }
 
 function hireBonus(h) {
-  const base = h.salary * TUNE.signingMonths;
-  if (h.kind !== 'scholar') return Math.ceil(base);
-  return Math.ceil(base * fitMult(h.lean, TUNE.hireMatchMult, TUNE.hireOpposeMult));
+  let b = h.salary * TUNE.signingMonths;
+  if (h.kind !== 'scholar') return Math.ceil(b);
+  b *= fitMult(h.lean, TUNE.hireMatchMult, TUNE.hireOpposeMult);
+  if (h.from) b *= TUNE.raidBonusMult; // buying out a rival's fellow
+  return Math.ceil(b);
 }
 
 function courtCost(d) {
-  return Math.ceil(d.cost * fitMult(d.lean, TUNE.donorMatchMult, TUNE.donorOpposeMult));
+  return Math.ceil(d.cost * TUNE.courtCostMult * fitMult(d.lean, TUNE.donorMatchMult, TUNE.donorOpposeMult));
 }
 
 // glyph for a price the player's politics moved
@@ -267,7 +284,13 @@ function actHire(idx) {
   G.hireMarket.splice(idx, 1);
   (h.kind === 'scholar' ? G.scholars : G.ops).push(h);
   drawHire();
-  logLine(`Hired ${h.name} (${h.kind === 'scholar' ? TAG_NAMES[h.tag] : h.role}). Signing bonus ${fmtMoney(bonus)}.`);
+  if (h.from) {
+    const r = G.rivals.find(x => x.short === h.from);
+    if (r) r.budget = Math.max(TUNE.raidMinBudget, r.budget - TUNE.raidBudgetHit);
+    logLine(`RAID: poached ${h.name} from ${h.from} for a ${fmtMoney(bonus)} buyout. ${h.from}'s influence budget slips to ~${r ? r.budget : '?'}/mo.`);
+  } else {
+    logLine(`Hired ${h.name} (${h.kind === 'scholar' ? TAG_NAMES[h.tag] : h.role}). Signing bonus ${fmtMoney(bonus)}.`);
+  }
   save(); render();
 }
 
@@ -393,6 +416,15 @@ function endMonth() {
   const grants = monthlyGrants();
   G.cash += grants;
 
+  // 4.5 grant cycles sunset (they pay their final month first)
+  const expired = G.donors.filter(d => d.term !== undefined && G.month - d.joined >= d.term - 1);
+  expired.forEach(d => {
+    news.push({ h: `${d.name.toUpperCase()} GRANT CYCLE CONCLUDES`, s: `${fmtMoney(d.grant)}/mo sunsets on schedule after ${d.term} months. “Do stay in touch,” they say, warmly, leaving.` });
+    logLine(`${d.name}'s grant cycle ended (${d.term} months). Court them again someday.`);
+    G.donorDeck.unshift(d.id);
+  });
+  G.donors = G.donors.filter(d => !expired.includes(d));
+
   // 5. donor demands checked
   G.donors.forEach(d => {
     if (!demandMet(d)) {
@@ -410,6 +442,29 @@ function endMonth() {
   // 6. pay the bills
   const costs = monthlyCosts();
   G.cash -= costs;
+
+  // 6.5 unsupported scholars lose patience (paid this month, then they quit)
+  const cap = supportCap();
+  const quitting = [];
+  G.scholars.forEach((s, i) => {
+    if (i < cap) { s.strikes = 0; return; }
+    s.strikes = (s.strikes || 0) + 1;
+    if (s.strikes >= TUNE.scholarStrikeLimit) quitting.push(s);
+    else logLine(`${s.name} has no ops support and is grumbling (${s.strikes}/${TUNE.scholarStrikeLimit}).`);
+  });
+  if (quitting.length) {
+    G.scholars = G.scholars.filter(s => !quitting.includes(s));
+    quitting.forEach(s => {
+      news.push({ h: `${s.name.toUpperCase()} QUITS, CITING “LACK OF INSTITUTIONAL SUPPORT”`, s: 'Storms out of a building they were never given keys to. Effective immediately.' });
+      logLine(`${s.name} quits — ${TUNE.scholarStrikeLimit} straight months without ops support.`);
+    });
+  }
+
+  // 6.6 annual reviews: every December, payroll ratchets up
+  if ((G.month + 1) % 12 === 0) {
+    [...G.scholars, ...G.ops].forEach(p => p.salary = Math.ceil(p.salary * (1 + TUNE.annualRaisePct)));
+    news.push({ h: 'ANNUAL REVIEWS CONCLUDE; EVERYONE REMAINS UNDERPAID', s: `Across-the-board raises land: payroll up ${Math.round(TUNE.annualRaisePct * 100)}%. The interns split a pizza.` });
+  }
 
   // 7. solvency
   if (G.cash < 0) {
@@ -525,6 +580,10 @@ function load() {
     if (!raw) return false;
     const data = JSON.parse(raw);
     G = data.G; uid = data.uid || 1000;
+    if (G) { // older saves predate grant cycles and scholar patience
+      (G.donors || []).forEach(d => { if (d.term === undefined) d.term = 18; });
+      (G.scholars || []).forEach(s => { if (s.strikes === undefined) s.strikes = 0; });
+    }
     return !!G && !G.over;
   } catch (e) { return false; }
 }
@@ -538,6 +597,7 @@ function showScreen(which) {
 
 function renderStart() {
   const hasSave = (() => { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const d = JSON.parse(r); return d.G && !d.G.over; } catch (e) { return false; } })();
+  $('#resumeBox').classList.toggle('hidden', !hasSave);
   $('#continueRow').innerHTML = hasSave
     ? `<button class="btn big" data-act="continue">▶ Resume Saved Game</button>` : '';
   $('#tankPicker').innerHTML = TANKS.map(t => `
@@ -585,8 +645,8 @@ function renderStaff(cap) {
         ${iconImg(s.icon)}
         <div class="pcontent">
           <div class="pline">
-            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)} ${leanChip(s.lean || 0)}
-            ${supported ? '' : '<span class="warn" title="No ops support — producing at half rate">⚠ half rate</span>'}
+            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)} ${leanChip(s.lean || 0)}${s.from ? ` <span class="chip" title="Poached from a rival">ex-${s.from}</span>` : ''}
+            ${supported ? '' : `<span class="warn" title="No ops support — half output, and they quit after ${TUNE.scholarStrikeLimit} straight unsupported months">⚠ half rate · patience ${'●'.repeat(s.strikes || 0)}${'○'.repeat(Math.max(0, TUNE.scholarStrikeLimit - (s.strikes || 0)))}${(s.strikes || 0) === TUNE.scholarStrikeLimit - 1 ? ' — one more month and they quit' : ''}</span>`}
           </div>
           <div class="pline dim">✦ ${supported ? s.out : Math.floor(s.out * TUNE.unsupportedMult)}/mo · ${fmtMoney(s.salary)}/mo</div>
           <div class="pline quirk">${s.quirk}</div>
@@ -637,7 +697,7 @@ function renderMyDonors() {
         ${iconImg('donor_' + d.id)}
         <div class="pcontent">
           <div class="pline"><b>${d.name}</b> ${leanChip(d.lean)}</div>
-          <div class="pline dim">${fmtMoney(d.grant)}/mo</div>
+          <div class="pline dim">${fmtMoney(d.grant)}/mo · ⌛ cycle: ${Math.max(0, d.term === undefined ? 18 : d.term - (G.month - d.joined))} mo left</div>
           <div class="pline ${met ? 'ok' : 'warn'}">${met ? '✓' : '✗'} ${demandText(d)}${d.demand.type === 'ENGAGE' ? ` <span class="dim">(this month: ✦${(G.monthCommits || {})[d.demand.tag] || 0})</span>` : ''}</div>
           <div class="pline dim">Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, TUNE.strikeLimit - d.strikes))}${d.strikes === TUNE.strikeLimit - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>
           <button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>
@@ -653,6 +713,14 @@ function expertiseChip(tag) {
   if (!n) return '';
   const pct = Math.round((expertiseMult(tag) - 1) * 100);
   return ` <span class="chip on" title="${n} ${tag} scholar${n > 1 ? 's' : ''} on staff amplify influence you commit here">★ +${pct}%</span>`;
+}
+
+// plain-language line under the fight meta when the bench boosts commits
+function expertiseNote(tag) {
+  const n = G.scholars.filter(s => s.tag === tag).length;
+  if (!n) return '';
+  const pct = Math.round((expertiseMult(tag) - 1) * 100);
+  return `<div class="pline dim expnote">Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).</div>`;
 }
 
 // who's behind each side of a fight, sorted big to small
@@ -676,6 +744,7 @@ function renderFights() {
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
           <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
+          ${expertiseNote(f.tag)}
           <div class="tug"><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
@@ -708,11 +777,13 @@ function renderReport() {
     <div class="pline">${s.months} months · ${s.won}W–${s.lost}L fights <span class="dim">(win rate ${winRate})</span></div>
     <div class="pline">Peak treasury: ${fmtMoney(s.peakCash)}</div>
     <div class="subdivider">MONTHLY LEDGER</div>
-    <div class="pline ok">Grants ...... ${fmtSigned(grants)}</div>
-    <div class="pline">Payroll ..... ${fmtSigned(-payroll)}</div>
-    <div class="pline">Rent ........ ${fmtSigned(-rent)}</div>
-    <div class="pline">Programs .... ${fmtSigned(-prog)}</div>
-    <div class="pline ${net < 0 ? 'warn' : 'ok'}"><b>Net ......... ${fmtSigned(net)}</b></div>
+    <table class="ledger">
+      <tr><td>Grants</td><td class="amt ok">${fmtSigned(grants)}</td></tr>
+      <tr><td>Payroll</td><td class="amt">${fmtSigned(-payroll)}</td></tr>
+      <tr><td>Rent</td><td class="amt">${fmtSigned(-rent)}</td></tr>
+      <tr><td>Programs</td><td class="amt">${fmtSigned(-prog)}</td></tr>
+      <tr class="net"><td>Net</td><td class="amt ${net < 0 ? 'warn' : 'ok'}">${fmtSigned(net)}</td></tr>
+    </table>
     <div class="subdivider">INFLUENCE</div>
     <div class="pline">Banked ✦ ${G.influence} · producing +${production()}/mo</div>
     <div class="pline dim">${Math.min(G.scholars.length, cap)}/${G.scholars.length} scholars supported</div>
@@ -740,7 +811,7 @@ function renderHireMarket() {
           <div class="cardbody mrow">
             ${iconImg(h.icon)}
             <div class="mcontent">
-              <div class="pline">${tagChip(h.tag)} ${leanChip(h.lean || 0)}</div>
+              <div class="pline">${tagChip(h.tag)} ${leanChip(h.lean || 0)}${h.from ? ` <span class="chip raid" title="Currently at a rival. Hiring is a raid: 1.5× signing bonus, and ${h.from} permanently loses ~${TUNE.raidBudgetHit}/mo of influence budget">AT ${h.from.toUpperCase()}</span>` : ''}</div>
               <div class="pline">✦ ${h.out}/mo · ${fmtMoney(h.salary)}/mo</div>
               <div class="pline quirk">${h.quirk}</div>
               <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>${fitMark(h.lean)}
@@ -771,7 +842,7 @@ function renderDonorMarket() {
       <div class="cardbody mrow">
         ${iconImg('donor_' + d.id)}
         <div class="mcontent">
-          <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b>${d.lead ? ' <span class="chip want" title="Won in a policy fight: half-price courtship">WARM INTRO</span>' : ''}</div>
+          <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b> <span class="dim">· ${d.term} mo cycle</span>${d.lead ? ' <span class="chip want" title="Won in a policy fight: half-price courtship">WARM INTRO</span>' : ''}</div>
           <div class="pline warn">Demands: ${demandText(d)}</div>
           <div class="pline quirk">${d.blurb}</div>
           <button class="btn tiny" data-act="court" data-idx="${i}" ${G.influence < courtCost(d) ? 'disabled' : ''}>Court (✦ ${courtCost(d)})</button>${fitMark(d.lean)}
