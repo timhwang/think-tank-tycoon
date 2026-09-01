@@ -721,12 +721,8 @@ function renderStaff(cap) {
         </div>
       </div>`);
   });
-  $('#staffBody').innerHTML =
-    (scholars.length ? `<div class="persongrid">${scholars.join('')}</div>`
-      : '<div class="empty">No scholars. No scholars, no influence.</div>') +
-    '<div class="subdivider">OPERATIONS</div>' +
-    (ops.length ? `<div class="persongrid">${ops.join('')}</div>`
-      : '<div class="empty">No ops staff. Scholars are wandering the halls unsupported.</div>');
+  $('#scholarsBody').innerHTML = scholars.join('') || '<div class="empty">No scholars. No scholars, no influence.</div>';
+  $('#opsBody').innerHTML = ops.join('') || '<div class="empty">No ops staff. Scholars are wandering the halls unsupported.</div>';
 }
 
 function renderPrograms() {

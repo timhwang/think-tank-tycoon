@@ -139,8 +139,8 @@ body {
   margin-bottom: 6px;
   align-items: start;
 }
-.rowtop { grid-template-columns: minmax(430px, 1.7fr) minmax(250px, 1fr) minmax(250px, 1fr); align-items: stretch; }
-.rowtop .wbody { max-height: none; flex: 1; min-height: 0; overflow-y: auto; }
+.rowtop { grid-template-columns: minmax(430px, 1.7fr) minmax(250px, 1fr) minmax(250px, 1fr); }
+.rowtop .wbody { height: 480px; max-height: 480px; overflow-y: auto; }
 .rowbottom { grid-template-columns: 2.6fr minmax(260px, 1fr); }
 
 .window { display: flex; flex-direction: column; min-width: 0; }
@@ -152,12 +152,10 @@ body {
 /* your institution: three internal columns */
 .shopgrid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
 }
 .shopcol { min-width: 0; }
-.persongrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; align-items: start; }
-.persongrid .person { margin-bottom: 0; }
 .titlebar .tbbtn { font-size: 9px; padding: 0 6px; margin-left: 8px; letter-spacing: 0; }
 
 /* SC2K-ish chunky scrollbars */
@@ -326,8 +324,9 @@ body {
 #startDialog { max-width: 1080px; width: 100%; }
 #resumeBox { max-width: 1080px; width: 100%; margin-top: 10px; }
 #goalBox { max-width: 1080px; width: 100%; margin-bottom: 10px; }
-.goaltext { font-size: 13px; text-align: center; padding: 12px 18px; line-height: 1.55; }
-.goaltext p { max-width: 700px; margin: 7px auto; }
+.goaltext { font-size: 13px; text-align: left; padding: 12px 18px; line-height: 1.55; }
+.goaltext p { max-width: 700px; margin: 0 auto; padding: 8px 0; }
+.goaltext p + p { border-top: 1px dotted #888; }
 #continueRow { text-align: center; margin: 10px 0; }
 #tankPicker {
   display: grid;
@@ -434,6 +433,4 @@ body {
   .rowtop .window:first-child { grid-column: auto; }
   .shopgrid { grid-template-columns: 1fr; }
 }
-@media (max-width: 700px) {
-  .persongrid { grid-template-columns: 1fr; }
-}
+
