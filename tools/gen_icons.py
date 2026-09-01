@@ -221,8 +221,9 @@ def make_og(key, args):
     target_h = round(1536 / (1200 / 630))
     top = min(args.og_top, 1024 - target_h)
     out = img.crop((0, top, 1536, top + target_h)).resize((1200, 630), Image.LANCZOS)
-    out.save(os.path.join(ROOT, 'og.png'), optimize=True)
-    print(f'wrote og.png (1200x630, crop top={top})')
+    # JPEG, not PNG: unfurl scrapers (iMessage especially) choke on megabyte images
+    out.convert('RGB').save(os.path.join(ROOT, 'og.jpg'), quality=85, optimize=True, progressive=True)
+    print(f'wrote og.jpg (1200x630, crop top={top})')
 
 
 def main():

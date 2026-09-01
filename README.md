@@ -61,7 +61,7 @@ Bottom row: **Your Institution** (staff / programs / donors) beside the **HQ Rep
 | `data.js` | all content: `TUNE` knobs, tanks, donor deck, fight deck, programs, name/quirk pools |
 | `game.js` | engine: state, turn resolution, rival AI, rendering, localStorage autosave |
 | `icons/` | 86 pixel-art icons (every fight, donor, program, and tank, plus 12 scholar portraits and 8 ops roles) |
-| `og.png` | social sharing card |
+| `og.jpg` | social sharing card (JPEG ≤ ~300KB — big PNGs make unfurl scrapers give up) |
 | `tools/gen_icons.py` | icon/social-card generator (OpenAI Images API → 64×64 quantized pixel art) |
 | `tools/simulate.js` | Monte Carlo balance harness (real engine, stubbed DOM, bot strategies) |
 
