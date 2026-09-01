@@ -39,13 +39,13 @@ Tuned by Monte Carlo (`node tools/simulate.js [runs]`), which stubs the DOM, loa
 |---|---|---|
 | passive (never acts) | **0%** | small tanks fold before election day; large ones limp in with 0 victories |
 | naive (random-ish moves) | **~5%** | banks 3–7 victories; the leaders bank 10–14 |
-| shrewd (build 3–4 months, then snipe cheap closing fights) | **~70%** | 79–85% on Comfy/Standard, 71% Scrappy, ~30% Hard Mode |
+| shrewd (build 3–4 months, then snipe cheap closing fights) | **~70%** | 79–85% on Easy/Medium, 71% Hard, ~30% Expert |
 
 The levers live in `TUNE` (`rivalBudgetMult`, `fightCashMult`, `grantMult`, `courtCostMult`, `scholarOutMult`, `annualRaisePct`, `grantTermMin/Max`, `electionMonth`). Rerun the harness after touching any; `TUNE_PATCH='{"rivalBudgetMult":0.7}' node tools/simulate.js` tests a patch without editing files. The win rate is steeply sensitive to `rivalBudgetMult` (0.7 → 88%, 0.9 → 14%), so tune in small steps.
 
 ## Institutions
 
-Six playable parody tanks across the spectrum and size ladder — from The Hutchings Institution (LARGE, Comfy) down to The Subsidiarity Project (TINY, Hard Mode) — plus The BLAND Corporation as a permanent NPC rival. Unchosen tanks become AI rivals who spend their influence budgets on fights matching their politics and pet issues.
+Six playable parody tanks across the spectrum and size ladder — from The Hutchings Institution (LARGE, Easy) down to The Subsidiarity Project (TINY, Expert) — plus The BLAND Corporation as a permanent NPC rival. Unchosen tanks become AI rivals who spend their influence budgets on fights matching their politics and pet issues.
 
 ## Layout
 

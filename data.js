@@ -54,7 +54,7 @@ const TANKS = [
   {
     id:'hutchings', name:'The Hutchings Institution', short:'Hutchings',
     motto:'Quality. Independence. Impact. Parking Validation.',
-    align:-1, alignLabel:'Center-Left', size:'LARGE', diff:'Comfy',
+    align:-1, alignLabel:'Center-Left', size:'LARGE', diff:'Easy',
     blurb:'The establishment. A marble building full of former officials waiting to become current officials again.',
     cash:2400, rent:80, scholars:4, ops:2, influence:20,
     donors:['waterworks','tomorrow'], budget:45, tags:['TAX','HLTH','TRADE'],
@@ -62,7 +62,7 @@ const TANKS = [
   {
     id:'legacy', name:'The Legacy Foundation', short:'Legacy',
     motto:'Building an America the Founders Would Recognize, Legally.',
-    align:2, alignLabel:'Right', size:'LARGE', diff:'Comfy',
+    align:2, alignLabel:'Right', size:'LARGE', diff:'Easy',
     blurb:'A battleship with a gift shop. Twelve field marshals of the culture war and a truly excellent mailing list.',
     cash:2200, rent:70, scholars:4, ops:2, influence:20,
     donors:['pemberton','hexagon'], budget:45, tags:['TAX','DEF','CLIM'],
@@ -70,7 +70,7 @@ const TANKS = [
   {
     id:'forum', name:'The Free Enterprise Forum', short:'The Forum',
     motto:'Markets Have Feelings Too.',
-    align:1, alignLabel:'Center-Right', size:'MEDIUM', diff:'Standard',
+    align:1, alignLabel:'Center-Right', size:'MEDIUM', diff:'Medium',
     blurb:'Tweedy, respectable, pro-business. Hosts the politest disagreements in town, with sandwiches.',
     cash:1000, rent:45, scholars:3, ops:2, influence:25,
     donors:['retail'], budget:30, tags:['TAX','TRADE','TECH'],
@@ -78,7 +78,7 @@ const TANKS = [
   {
     id:'momentum', name:'Center for American Momentum', short:'Momentum',
     motto:'The Arc of History Needs a Push.',
-    align:-2, alignLabel:'Left', size:'MEDIUM', diff:'Standard',
+    align:-2, alignLabel:'Left', size:'MEDIUM', diff:'Medium',
     blurb:'Runs on cold brew and five-point plans. Everyone on staff is either 29 or 63.',
     cash:900, rent:45, scholars:3, ops:2, influence:25,
     donors:['billionaires'], budget:30, tags:['HLTH','CLIM','TECH'],
@@ -86,7 +86,7 @@ const TANKS = [
   {
     id:'hand', name:'The Invisible Hand Society', short:'The Hand',
     motto:'Leave Us Alone. Also, Fund Us.',
-    align:1, alignLabel:'Libertarian', size:'SMALL', diff:'Scrappy',
+    align:1, alignLabel:'Libertarian', size:'SMALL', diff:'Hard',
     blurb:'Six people with four opinions each. The newsletter is, by all accounts, legendary.',
     cash:450, rent:25, scholars:2, ops:1, influence:30,
     donors:['ashgrove'], budget:18, tags:['TAX','TECH','TRADE'],
@@ -94,7 +94,7 @@ const TANKS = [
   {
     id:'subsidiarity', name:'The Subsidiarity Project', short:'Subsidiarity',
     motto:'Small Is Beautiful. So Is Our Budget.',
-    align:0, alignLabel:'Post-Liberal', size:'TINY', diff:'Hard Mode',
+    align:0, alignLabel:'Post-Liberal', size:'TINY', diff:'Expert',
     blurb:'Three converts and a fax machine, arguing that everything went wrong in 1789.',
     cash:340, rent:15, scholars:1, ops:1, influence:50,
     donors:[], budget:10, tags:['HLTH','TECH'],
