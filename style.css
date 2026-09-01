@@ -157,6 +157,7 @@ body {
 }
 .shopcol { min-width: 0; }
 .titlebar .tbbtn { font-size: 9px; padding: 0 6px; margin-left: 8px; letter-spacing: 0; }
+.fittip { font-size: 9px; font-weight: bold; white-space: nowrap; cursor: help; border-bottom: 1px dotted currentColor; }
 
 /* SC2K-ish chunky scrollbars */
 .wbody::-webkit-scrollbar, .shopcol::-webkit-scrollbar { width: 14px; }

@@ -244,11 +244,29 @@ function courtCost(d) {
   return Math.ceil(d.cost * TUNE.courtCostMult * fitMult(d.lean, TUNE.donorMatchMult, TUNE.donorOpposeMult));
 }
 
-// glyph for a price the player's politics moved
-function fitMark(lean) {
-  const m = (lean || 0) * Math.sign(tank().align);
-  return m > 0 ? ' <span class="ok" title="Shares your politics: discounted">▼</span>'
-       : m < 0 ? ' <span class="warn" title="Crosses the aisle: premium">▲</span>' : '';
+// visible tip when the player's politics move a price: "▼ −50%", with the
+// actual before/after numbers on hover
+function fitTipSpan(m, pct, detail) {
+  if (m === 0 || pct === 0) return '';
+  const label = (pct > 0 ? '+' : '−') + Math.abs(pct) + '%';
+  return m > 0
+    ? ` <span class="fittip ok" title="Shares your shop's politics — ${detail}">▼ ${label}</span>`
+    : ` <span class="fittip warn" title="Crosses the aisle to work with you — ${detail}">▲ ${label}</span>`;
+}
+
+function fitTipHire(h) {
+  if (h.kind !== 'scholar') return '';
+  const m = (h.lean || 0) * Math.sign(tank().align);
+  const base = Math.ceil(h.salary * TUNE.signingMonths * (h.from ? TUNE.raidBonusMult : 1));
+  const now = hireBonus(h);
+  return fitTipSpan(m, Math.round((now / base - 1) * 100), `signing bonus ${fmtMoney(base)} → ${fmtMoney(now)}`);
+}
+
+function fitTipDonor(d) {
+  const m = (d.lean || 0) * Math.sign(tank().align);
+  const base = Math.ceil(d.cost * TUNE.courtCostMult);
+  const now = courtCost(d);
+  return fitTipSpan(m, Math.round((now / base - 1) * 100), `courting cost ✦${base} → ✦${now}`);
 }
 
 // matching scholars amplify influence committed to a fight of their tag
@@ -880,7 +898,7 @@ function renderHireMarket() {
               <div class="pline">${tagChip(h.tag)} ${leanChip(h.lean || 0)}${h.from ? ` <span class="chip raid" title="Currently at a rival. Hiring is a raid: 1.5× signing bonus, and ${h.from} permanently loses ~${TUNE.raidBudgetHit}/mo of influence budget">AT ${h.from.toUpperCase()}</span>` : ''}</div>
               <div class="pline">✦ ${h.out}/mo · ${fmtMoney(h.salary)}/mo</div>
               <div class="pline quirk">${h.quirk}</div>
-              <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>${fitMark(h.lean)}
+              <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>${fitTipHire(h)}
             </div>
           </div>
         </div>`;
@@ -911,7 +929,7 @@ function renderDonorMarket() {
           <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b> <span class="dim">· ${d.term} mo cycle</span>${d.lead ? ' <span class="chip want" title="Won in a policy fight: half-price courtship">WARM INTRO</span>' : ''}</div>
           <div class="pline warn">Demands: ${demandText(d)}</div>
           <div class="pline quirk">${d.blurb}</div>
-          <button class="btn tiny" data-act="court" data-idx="${i}" ${G.influence < courtCost(d) ? 'disabled' : ''}>Court (✦ ${courtCost(d)})</button>${fitMark(d.lean)}
+          <button class="btn tiny" data-act="court" data-idx="${i}" ${G.influence < courtCost(d) ? 'disabled' : ''}>Court (✦ ${courtCost(d)})</button>${fitTipDonor(d)}
         </div>
       </div>
     </div>`).join('');
