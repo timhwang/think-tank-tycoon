@@ -158,30 +158,47 @@ function botShrewd() {
     const si = f.sides[0].total >= f.sides[1].total ? 0 : 1;
     actCommit(fi, si, Math.ceil(need / expertiseMult(f.tag)));
   });
-  // harvest shares: small stakes on leading sides about to resolve
+  // hunt victories: find the cheapest fight where we can lead the winning side
+  const reserve = G.month < 4 ? 60 : 15; // build the machine first, then spend
+  const plans = [];
   G.fights.forEach((f, fi) => {
-    if (f.monthsLeft > 1 || G.influence < 40) return;
-    const si = f.sides[0].total >= f.sides[1].total ? 0 : 1;
-    if (f.sides[si].yours === 0 && fightReward(f).cash >= 150) actCommit(fi, si, 15);
+    if (f.monthsLeft > 2) return; // commit late; early money invites counter-piling
+    f.sides.forEach((s, si) => {
+      const opp = f.sides[1 - si];
+      const topOther = Math.max(0, ...Object.values(s.rivals || {}));
+      const buffer = 6 + 8 * f.monthsLeft; // rivals will keep spending
+      const eff = Math.max(topOther + buffer - s.yours, opp.total + buffer - s.total, 0);
+      const raw = Math.ceil(eff / expertiseMult(f.tag)) || 1;
+      plans.push({ fi, si, raw });
+    });
   });
+  plans.sort((a, b) => a.raw - b.raw);
+  let bids = 0;
+  for (const p of plans) {
+    if (bids >= 3 || p.raw > G.influence - reserve) break;
+    actCommit(p.fi, p.si, p.raw);
+    bids++;
+  }
 }
 
 globalThis.__runOne = function (tankId, strategy, maxMonths) {
   newGame(tankId);
-  while (!G.over && G.stats.months < maxMonths) {
+  let guard = 0;
+  while (!G.over && guard++ < (maxMonths || 40)) {
     if (strategy === 'naive') botNaive();
     else if (strategy === 'decent') botDecent();
     else if (strategy === 'shrewd') botShrewd();
     endMonth();
   }
+  const er = G.electionResult;
   return {
-    survived: !G.over,
+    win: !!(er && er.win),
+    rank: er ? er.rank : 8,           // folded pre-election: unranked
+    madeElection: !!er,
     months: G.stats.months,
     cash: G.cash,
-    won: G.stats.won,
-    lost: G.stats.lost,
-    scholars: G.scholars.length,
-    donors: G.donors.length,
+    victories: G.stats.won,
+    topScore: Math.max(G.stats.won, ...G.rivals.map(r => r.victories || 0)),
   };
 };
 globalThis.__tankIds = TANKS.map(t => t.id);
@@ -200,34 +217,34 @@ if (tunePatch) { sandbox.__setTune(tunePatch); console.log('TUNE patch:', JSON.s
 const strategies = ['passive', 'naive', 'shrewd'];
 const median = a => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 
-console.log(`${RUNS} runs/cell, ${MONTHS}-month horizon\n`);
-console.log('tank          strategy  survive%  med-months  mean-cash  mean-W/L');
-console.log('------------  --------  --------  ----------  ---------  --------');
+console.log(`${RUNS} runs/cell, election at month 22\n`);
+console.log('tank          strategy  win-election%  reach-election%  avg-rank  avg-victories  top-score');
+console.log('------------  --------  -------------  ---------------  --------  -------------  ---------');
 const summary = {};
 for (const tankId of sandbox.__tankIds) {
   for (const strat of strategies) {
     const rs = [];
     for (let i = 0; i < RUNS; i++) rs.push(sandbox.__runOne(tankId, strat, MONTHS));
-    const surv = rs.filter(r => r.survived).length / RUNS;
     const cell = {
-      surv: Math.round(surv * 100),
-      med: median(rs.map(r => r.months)),
-      cash: Math.round(rs.reduce((a, r) => a + r.cash, 0) / RUNS),
-      won: (rs.reduce((a, r) => a + r.won, 0) / RUNS).toFixed(1),
-      lost: (rs.reduce((a, r) => a + r.lost, 0) / RUNS).toFixed(1),
+      win: Math.round(rs.filter(r => r.win).length / RUNS * 100),
+      made: Math.round(rs.filter(r => r.madeElection).length / RUNS * 100),
+      rank: (rs.reduce((a, r) => a + r.rank, 0) / RUNS).toFixed(1),
+      vict: (rs.reduce((a, r) => a + r.victories, 0) / RUNS).toFixed(1),
+      top: (rs.reduce((a, r) => a + r.topScore, 0) / RUNS).toFixed(1),
     };
     summary[`${tankId}/${strat}`] = cell;
     console.log(
       tankId.padEnd(12), strat.padEnd(9),
-      String(cell.surv + '%').padStart(7),
-      String(cell.med).padStart(11),
-      String(cell.cash + 'k').padStart(10),
-      `${cell.won}/${cell.lost}`.padStart(9));
+      String(cell.win + '%').padStart(12),
+      String(cell.made + '%').padStart(16),
+      String(cell.rank).padStart(9),
+      String(cell.vict).padStart(14),
+      String(cell.top).padStart(10));
   }
   console.log('');
 }
-const overall = s => {
-  const cells = Object.entries(summary).filter(([k]) => k.endsWith('/' + s)).map(([, v]) => v.surv);
+const overall = (s, k) => {
+  const cells = Object.entries(summary).filter(([x]) => x.endsWith('/' + s)).map(([, v]) => v[k]);
   return Math.round(cells.reduce((a, b) => a + b, 0) / cells.length);
 };
-console.log(`overall survival — passive ${overall('passive')}%, naive ${overall('naive')}%, shrewd ${overall('shrewd')}%`);
+console.log(`overall election wins — passive ${overall('passive', 'win')}%, naive ${overall('naive', 'win')}%, shrewd ${overall('shrewd', 'win')}%`);

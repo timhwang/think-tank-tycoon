@@ -2,8 +2,11 @@
 
 *A Strategy Game of Wealth, Power, and Terrible Ideas.*
 
-Run a DC think tank. Hire scholars, mint influence, court donors, win the news cycle.
-A tabletop-flavored simulator in the spirit of Frontier Lab Tycoon, wearing a SimCity 2000 costume.
+Run a DC think tank from January 2027 to Election Night, November 2028. **Bank the most policy
+victories by election day** and be crowned the most influential think tank in Washington — a victory
+goes to whichever institution carried the winning side of a fight hardest, so free-riding pays cash
+but never credit. A tabletop-flavored simulator in the spirit of Frontier Lab Tycoon, wearing a
+SimCity 2000 costume.
 
 ## Run it
 
@@ -25,19 +28,20 @@ STAFF ──produce──▶ INFLUENCE ──spent on──▶ POLICY FIGHTS ─
 - **Influence.** Spend it on **policy fights** (bills, executive orders, nominations — a rotating board of 4 from a 30-card deck). Each fight is a tug-of-war between two sides; rival think tanks pile on every month, and the ⚑ attribution line under each side shows exactly who's backing it and with how much. When the clock hits zero the bigger pile wins; cash and clout (✦) rewards scale by your share of the winning side, and some fights pay in kind — a grateful scholar joining free, a warm donor intro at half court cost, or amnesty on donor strikes.
 - **Donors.** Court them with influence (cheaper when they share your politics, pricier across the aisle); they pay monthly grants. Every donor in the 26-card deck has a **demand** — a scholar tag on the roster, a vanity program running, monthly influence pushed into their pet issue's fights, or ideological purity (back the wrong side of a fight and take an instant strike). Unmet demands = 1 strike/month; two strikes and they walk. Vanity **programs** (gala, podcast, marble lobby) cost money and produce ~nothing, but some of the richest donors won't fund you without them. The perverse incentives are the point.
 - **Raids.** Some market scholars are sitting at a rival right now (marked **AT [RIVAL]**). Hiring one costs a 1.5× signing bonus and permanently dents that rival's monthly influence budget.
-- **Losing.** Two consecutive months in the red and the institution folds. The Bugle writes the obituary. The treadmill is real: every December payroll rises 9%, donor grants sunset on 10–20 month cycles, and scholars quit after two straight months without ops support.
+- **The race.** Every resolved fight awards one victory to the winning side's single top contributor (ties go to you). The HQ leaderboard tracks all seven institutions live; at month 22 the election ends the game and ranks everyone. The core tension: influence spent on victories is leakage from the scholars→donors engine — glory and growth compete for the same points.
+- **Losing.** Two consecutive months in the red and the institution folds before the election. The treadmill is real: every December payroll rises 9%, donor grants sunset on 10–20 month cycles, and scholars quit after two straight months without ops support.
 
 ## Balance
 
-Tuned by Monte Carlo (`node tools/simulate.js [runs] [months]`), which stubs the DOM, loads the real engine, and drives three bot strategies through 60 months. Current numbers (200 runs/cell):
+Tuned by Monte Carlo (`node tools/simulate.js [runs]`), which stubs the DOM, loads the real engine, and drives three bot strategies through the full 22-month campaign. Current numbers (300 runs/cell, win = ranked #1 on Election Night):
 
-| strategy | overall survival @ 60 mo | notes |
+| strategy | wins the election | notes |
 |---|---|---|
-| passive (never acts) | **0%** | median fold: month 9 (tiny) – 26 (large) |
-| naive (random-ish moves) | **~65%** | 87% on Comfy tanks down to 21% on Hard Mode |
-| shrewd (support discipline + donor breadth + share-harvesting) | **~87%** | ~100% on normal tanks, 25% on Hard Mode |
+| passive (never acts) | **0%** | small tanks fold before election day; large ones limp in with 0 victories |
+| naive (random-ish moves) | **~5%** | banks 3–7 victories; the leaders bank 10–14 |
+| shrewd (build 3–4 months, then snipe cheap closing fights) | **~70%** | 79–85% on Comfy/Standard, 71% Scrappy, ~30% Hard Mode |
 
-The levers live in `TUNE` (`rivalBudgetMult`, `fightCashMult`, `grantMult`, `courtCostMult`, `scholarOutMult`, `annualRaisePct`, `grantTermMin/Max`). Rerun the harness after touching any of them; `TUNE_PATCH='{"grantMult":0.7}' node tools/simulate.js` tests a patch without editing files. Known frontier: a skilled player still snowballs wealth after year 2 — donor-portfolio caps or diminishing grant returns are the likely next brake.
+The levers live in `TUNE` (`rivalBudgetMult`, `fightCashMult`, `grantMult`, `courtCostMult`, `scholarOutMult`, `annualRaisePct`, `grantTermMin/Max`, `electionMonth`). Rerun the harness after touching any; `TUNE_PATCH='{"rivalBudgetMult":0.7}' node tools/simulate.js` tests a patch without editing files. The win rate is steeply sensitive to `rivalBudgetMult` (0.7 → 88%, 0.9 → 14%), so tune in small steps.
 
 ## Institutions
 

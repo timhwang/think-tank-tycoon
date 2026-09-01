@@ -279,6 +279,12 @@ body {
 .ledger td.amt { text-align: right; font-weight: bold; white-space: nowrap; }
 .ledger tr.net td { border-top: 2px solid var(--win-dk); border-bottom: none; font-weight: bold; }
 
+/* ---------- leaderboard ---------- */
+.lb .you td { font-weight: bold; background: #d8d4b8; }
+.lb .lbhead td { font-family: 'Silkscreen', Verdana, sans-serif; font-size: 8px; color: #333; border-bottom: 1px solid var(--win-dk); }
+.lb td { vertical-align: middle; }
+.lb .icon.sm { vertical-align: middle; }
+
 /* ---------- HQ report ---------- */
 .report .pline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .report .icon.sm { width: 16px; height: 16px; }
@@ -308,6 +314,8 @@ body {
 }
 #startDialog { max-width: 1080px; width: 100%; }
 #resumeBox { max-width: 1080px; width: 100%; margin-top: 10px; }
+#goalBox { max-width: 1080px; width: 100%; margin-bottom: 10px; }
+.goaltext { font-size: 12px; text-align: center; padding: 10px 16px; line-height: 1.5; }
 #continueRow { text-align: center; margin: 10px 0; }
 .expnote { margin-bottom: 4px; }
 #tankPicker {

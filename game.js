@@ -88,6 +88,7 @@ function buildRivals(chosenId) {
   const mk = t => ({
     short: t.short, name: t.name, align: t.align,
     budget: Math.round(t.budget * TUNE.rivalBudgetMult), tags: t.tags,
+    victories: 0,
   });
   const rivals = TANKS.filter(t => t.id !== chosenId).map(mk);
   NPC_TANKS.forEach(t => rivals.push(mk(t)));
@@ -147,7 +148,7 @@ function newGame(tankId) {
     fightDeck: shuffle(FIGHTS.map(f => f.id)),
     donorDeck: shuffle(DONORS.map(d => d.id).filter(id => !t.donors.includes(id))),
     rivals: buildRivals(tankId),
-    log: [], negStreak: 0, over: false, monthCommits: {},
+    log: [], negStreak: 0, over: false, monthCommits: {}, v: 2,
     stats: { months: 0, won: 0, lost: 0, peakCash: t.cash },
   };
   PROGRAMS.forEach(p => G.programs[p.id] = false);
@@ -494,6 +495,7 @@ function endMonth() {
   G.monthCommits = {}; // engagement ledger resets after demands were judged
   G.month++;
   G.stats.peakCash = Math.max(G.stats.peakCash, G.cash);
+  if (G.month >= TUNE.electionMonth) { electionDay(news); return; }
   save(); render();
   if (news.length) showPaper(news);
 }
@@ -504,6 +506,21 @@ function resolveFight(f, news) {
   const loser = winner === a ? b : a;
   const tie = a.total === b.total;
   let sub = `“${winner.label}” prevails ${winner.total}–${loser.total}${tie ? ' after a coin flip nobody will discuss' : ''}.`;
+
+  // the victory is banked by whoever carried the winning side hardest
+  let topRival = null, topAmt = 0;
+  Object.entries(winner.rivals || {}).forEach(([short, amt]) => {
+    if (amt > topAmt) { topAmt = amt; topRival = short; }
+  });
+  const playerBanks = winner.yours > 0 && winner.yours >= topAmt; // ties go to you
+  if (playerBanks) {
+    G.stats.won++;
+  } else if (topRival) {
+    const r = G.rivals.find(x => x.short === topRival);
+    if (r) r.victories = (r.victories || 0) + 1;
+  }
+  const creditLine = playerBanks ? `${tank().short} banks the victory.`
+    : topRival ? `${topRival} banks the victory.` : 'Nobody in particular claims it.';
 
   if (winner.yours > 0) {
     const share = winner.total > 0 ? winner.yours / winner.total : 1;
@@ -528,19 +545,46 @@ function resolveFight(f, news) {
       G.donors.forEach(d => d.strikes = Math.max(0, d.strikes - 1));
       gains.push('a grateful town forgets old grudges (all donor strikes −1)');
     }
-    G.stats.won++;
-    sub += ` ${tank().short} claims credit everywhere. The spoils: ${gains.join('; ')}.`;
-    news.push({ h: `${f.title.toUpperCase()} — RESOLVED`, s: sub, big: true });
-    logLine(`WIN: ${f.title} → ${gains.join('; ')} (${Math.round(share * 100)}% of the winning side).`);
+    sub += ` ${creditLine} The spoils: ${gains.join('; ')}.`;
+    news.push({ h: playerBanks ? `${f.title.toUpperCase()} — VICTORY FOR ${tank().short.toUpperCase()}` : `${f.title.toUpperCase()} — RESOLVED`, s: sub, big: playerBanks });
+    logLine(`${playerBanks ? 'VICTORY BANKED' : 'Backed the winner'}: ${f.title} → ${gains.join('; ')} (${Math.round(share * 100)}% of the winning side).`);
   } else if (loser.yours > 0) {
     G.stats.lost++;
-    sub += ` ${tank().short} spent ${loser.yours} influence on the losing side. A fellow calls it “directionally correct.”`;
+    sub += ` ${creditLine} ${tank().short} spent ${loser.yours} influence on the losing side. A fellow calls it “directionally correct.”`;
     news.push({ h: `${f.title.toUpperCase()} — RESOLVED`, s: sub });
     logLine(`LOSS: ${f.title}. ${loser.yours} influence down the drain.`);
   } else {
-    news.push({ h: `${f.title.toUpperCase()} — RESOLVED`, s: sub + ' You watched from the sidelines.' });
-    logLine(`${f.title} resolved without you.`);
+    news.push({ h: `${f.title.toUpperCase()} — RESOLVED`, s: `${sub} ${creditLine} You watched from the sidelines.` });
+    logLine(`${f.title} resolved without you. ${creditLine}`);
   }
+}
+
+function standings() {
+  const rows = [
+    { short: tank().short, name: tank().name, v: G.stats.won, you: true },
+    ...G.rivals.map(r => ({ short: r.short, name: r.name, v: r.victories || 0, you: false })),
+  ];
+  rows.sort((x, y) => y.v - x.v || (x.you ? -1 : y.you ? 1 : 0)); // you win ties
+  return rows;
+}
+
+function electionDay(news) {
+  G.over = true;
+  const rows = standings();
+  const rank = rows.findIndex(r => r.you) + 1;
+  const win = rank === 1 && rows[0].v > 0;
+  G.electionResult = { win, rank, victories: G.stats.won };
+  const list = rows.map((r, i) => `${i + 1}. ${r.short} — ${r.v}`).join('   ·   ');
+  const items = [
+    win
+      ? { h: `${tank().name.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK IN WASHINGTON`, s: `Election Night, November 2028. ${G.stats.won} policy ${G.stats.won === 1 ? 'victory' : 'victories'} banked since January 2027. The gala will be insufferable.`, big: true }
+      : { h: `${rows[0].short.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK; ${tank().short.toUpperCase()} RANKS #${rank}`, s: `Election Night, November 2028. You banked ${G.stats.won} ${G.stats.won === 1 ? 'victory' : 'victories'} to their ${rows[0].v}. There is always the next cycle.`, big: true },
+    { h: 'FINAL STANDINGS', s: list },
+    ...news,
+  ];
+  save();
+  render();
+  showPaper(items, true);
 }
 
 function gameOver(news) {
@@ -549,7 +593,7 @@ function gameOver(news) {
   render();
   const s = G.stats;
   showPaper([
-    { h: `${tank().name.toUpperCase()} FOLDS`, s: 'Fellows scatter to podcasts. The donor wall is auctioned by the marble pound.', big: true },
+    { h: `${tank().name.toUpperCase()} FOLDS`, s: 'Fellows scatter to podcasts. The donor wall is auctioned by the marble pound. The election proceeds without you.', big: true },
     { h: 'THE NUMBERS', s: `${s.months} months of operation · ${s.won} fights won · ${s.lost} lost · peak treasury ${fmtMoney(s.peakCash)}.` },
   ], true);
 }
@@ -580,9 +624,18 @@ function load() {
     if (!raw) return false;
     const data = JSON.parse(raw);
     G = data.G; uid = data.uid || 1000;
-    if (G) { // older saves predate grant cycles and scholar patience
+    if (G) { // older saves predate grant cycles, scholar patience, victories
       (G.donors || []).forEach(d => { if (d.term === undefined) d.term = 18; });
       (G.scholars || []).forEach(s => { if (s.strikes === undefined) s.strikes = 0; });
+      (G.rivals || []).forEach(r => { if (r.victories === undefined) r.victories = 0; });
+      if (!G.v || G.v < 2) { // rebase rival budgets onto the tuned scale
+        const defs = TANKS.concat(NPC_TANKS);
+        (G.rivals || []).forEach(r => {
+          const def = defs.find(t => t.short === r.short);
+          if (def) r.budget = Math.round(def.budget * TUNE.rivalBudgetMult);
+        });
+        G.v = 2;
+      }
     }
     return !!G && !G.over;
   } catch (e) { return false; }
@@ -620,7 +673,8 @@ function render() {
   const cap = supportCap();
 
   $('#tbTank').textContent = t.short.toUpperCase();
-  $('#tbDate').textContent = dateStr(G.month);
+  const monthsLeft = TUNE.electionMonth - G.month;
+  $('#tbDate').textContent = monthsLeft > 0 ? `${dateStr(G.month)} · ${monthsLeft} mo to election` : 'ELECTION NIGHT';
   $('#tbCash').innerHTML = `${fmtMoney(G.cash)} <span class="dim">(${fmtSigned(net)}/mo)</span>`;
   $('#tbCash').className = G.cash < 0 ? 'tbval bad' : 'tbval';
   $('#tbInf').innerHTML = `✦ ${G.influence} <span class="dim">(+${production()}/mo)</span>`;
@@ -766,15 +820,21 @@ function renderReport() {
   const s = G.stats;
   const grants = monthlyGrants(), payroll = payrollCost(), rent = tank().rent, prog = programsCost();
   const net = grants - payroll - rent - prog;
-  const winRate = (s.won + s.lost) ? Math.round(s.won / (s.won + s.lost) * 100) + '%' : '—';
   const cap = supportCap();
-  const rivalRows = G.rivals.map(r =>
-    `<div class="pline">${iconImg('tank_' + tankIdByShort(r.short), 'sm')}<b>${r.short}</b> ${leanChip(r.align)} <span class="dim">✦ ~${r.budget}/mo · ${r.tags.join(' ')}</span></div>`).join('');
+  const lbRows = standings().map((row, i) => {
+    const budget = row.you ? `+${production()}` : `~${G.rivals.find(r => r.short === row.short).budget}`;
+    return `<tr class="${row.you ? 'you' : ''}">
+      <td>${i + 1}</td>
+      <td>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}${row.you ? ' ★' : ''}</td>
+      <td class="amt">${row.v}</td>
+      <td class="amt dim">✦${budget}</td>
+    </tr>`;
+  }).join('');
   $('#reportBody').innerHTML = `
     <div class="pline"><b>${tank().name}</b></div>
     <div class="pline quirk">“${tank().motto}”</div>
     <div class="subdivider">RECORD</div>
-    <div class="pline">${s.months} months · ${s.won}W–${s.lost}L fights <span class="dim">(win rate ${winRate})</span></div>
+    <div class="pline">${s.months} months · <b>${s.won} victories banked</b> · ${s.lost} losing sides</div>
     <div class="pline">Peak treasury: ${fmtMoney(s.peakCash)}</div>
     <div class="subdivider">MONTHLY LEDGER</div>
     <table class="ledger">
@@ -787,8 +847,11 @@ function renderReport() {
     <div class="subdivider">INFLUENCE</div>
     <div class="pline">Banked ✦ ${G.influence} · producing +${production()}/mo</div>
     <div class="pline dim">${Math.min(G.scholars.length, cap)}/${G.scholars.length} scholars supported</div>
-    <div class="subdivider">THE OPPOSITION</div>
-    ${rivalRows}`;
+    <div class="subdivider">LEADERBOARD — POLICY VICTORIES</div>
+    <table class="ledger lb">
+      <tr class="lbhead"><td>#</td><td>TANK</td><td class="amt">W</td><td class="amt">✦/mo</td></tr>
+      ${lbRows}
+    </table>`;
 }
 
 function tankIdByShort(short) {
