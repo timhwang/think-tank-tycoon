@@ -279,7 +279,6 @@ body {
 .sidenums { font-weight: bold; white-space: nowrap; }
 .sidebtns { display: flex; gap: 3px; }
 .backers { font-size: 8px; margin: 0 0 2px 12px; }
-.expnote { font-size: 9px; margin: 0 0 2px 0; }
 
 /* ---------- ledger table ---------- */
 .ledger { width: 100%; border-collapse: collapse; font-size: 11px; }

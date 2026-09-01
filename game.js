@@ -795,15 +795,7 @@ function expertiseChip(tag) {
   const n = G.scholars.filter(s => s.tag === tag).length;
   if (!n) return '';
   const pct = Math.round((expertiseMult(tag) - 1) * 100);
-  return ` <span class="chip on" title="${n} ${tag} scholar${n > 1 ? 's' : ''} on staff amplify influence you commit here">★ +${pct}%</span>`;
-}
-
-// plain-language line under the fight meta when the bench boosts commits
-function expertiseNote(tag) {
-  const n = G.scholars.filter(s => s.tag === tag).length;
-  if (!n) return '';
-  const pct = Math.round((expertiseMult(tag) - 1) * 100);
-  return `<div class="pline dim expnote">Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).</div>`;
+  return ` <span class="chip on" title="Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).">★ +${pct}%</span>`;
 }
 
 // who's behind each side of a fight, sorted big to small
@@ -827,7 +819,6 @@ function renderFights() {
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
           <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
-          ${expertiseNote(f.tag)}
           <div class="tug"><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
