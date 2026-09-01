@@ -226,22 +226,31 @@ function angeredBy(fight, side) {
     !fight.crossed[d.id]);
 }
 
-// partisan fit: matching leans discount a hire/courtship, crossing costs extra
-function fitMult(lean, matchMult, opposeMult) {
-  const m = (lean || 0) * Math.sign(tank().align);
-  return m > 0 ? matchMult : m < 0 ? opposeMult : 1;
+// partisan fit: matching leans discount a hire/courtship, crossing costs
+// extra — and hardline shops (two arrows, |align| = 2) feel both harder
+function fitMult(lean, kind) {
+  const a = tank().align;
+  const m = (lean || 0) * Math.sign(a);
+  if (m === 0) return 1;
+  const hard = Math.abs(a) >= 2;
+  if (kind === 'hire') {
+    return m > 0 ? (hard ? TUNE.hireMatchMult2 : TUNE.hireMatchMult)
+                 : (hard ? TUNE.hireOpposeMult2 : TUNE.hireOpposeMult);
+  }
+  return m > 0 ? (hard ? TUNE.donorMatchMult2 : TUNE.donorMatchMult)
+               : (hard ? TUNE.donorOpposeMult2 : TUNE.donorOpposeMult);
 }
 
 function hireBonus(h) {
   let b = h.salary * TUNE.signingMonths;
   if (h.kind !== 'scholar') return Math.ceil(b);
-  b *= fitMult(h.lean, TUNE.hireMatchMult, TUNE.hireOpposeMult);
+  b *= fitMult(h.lean, 'hire');
   if (h.from) b *= TUNE.raidBonusMult; // buying out a rival's fellow
   return Math.ceil(b);
 }
 
 function courtCost(d) {
-  return Math.ceil(d.cost * TUNE.courtCostMult * fitMult(d.lean, TUNE.donorMatchMult, TUNE.donorOpposeMult));
+  return Math.ceil(d.cost * TUNE.courtCostMult * fitMult(d.lean, 'donor'));
 }
 
 // visible tip when the player's politics move a price: "▼ −50%", with the
@@ -960,6 +969,32 @@ document.addEventListener('click', e => {
   else if (act === 'help') $('#helpWin').classList.toggle('hidden');
   else if (act === 'progwin') $('#progWin').classList.toggle('hidden');
 });
+
+// ---------- instant tooltips ----------
+// native title tooltips need a ~1s motionless hover; replace them all with
+// an immediate Win95-style tip box
+const tipBox = document.createElement('div');
+tipBox.id = 'tooltip';
+tipBox.className = 'hidden';
+document.body.appendChild(tipBox);
+
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip], [title]');
+  if (!t) { tipBox.classList.add('hidden'); return; }
+  if (t.getAttribute('title')) { // migrate so the native tooltip never doubles up
+    t.dataset.tip = t.getAttribute('title');
+    t.removeAttribute('title');
+  }
+  if (!t.dataset.tip) { tipBox.classList.add('hidden'); return; }
+  tipBox.textContent = t.dataset.tip;
+  tipBox.classList.remove('hidden');
+  const r = t.getBoundingClientRect();
+  const w = tipBox.offsetWidth;
+  tipBox.style.left = Math.max(4, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
+  tipBox.style.top = (r.bottom + 6 + tipBox.offsetHeight > window.innerHeight
+    ? r.top - tipBox.offsetHeight - 6 : r.bottom + 6) + 'px';
+});
+document.addEventListener('scroll', () => tipBox.classList.add('hidden'), true);
 
 // ---------- boot ----------
 renderStart();

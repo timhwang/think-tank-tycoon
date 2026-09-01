@@ -19,6 +19,10 @@ const TUNE = {
   hireOpposeMult: 1.5,   // ...and when they cross the aisle to join you
   donorMatchMult: 0.7,   // court cost mult when a donor shares your lean
   donorOpposeMult: 1.4,  // ...and when they don't
+  hireMatchMult2: 0.4,   // hardline shops (|align| = 2) feel partisan fit harder:
+  hireOpposeMult2: 1.75, // ...cheaper true believers,
+  donorMatchMult2: 0.6,  // ...cheaper movement money,
+  donorOpposeMult2: 1.6, // ...and a steeper price for ecumenism
   raidChance: 0.22,      // odds a market scholar is poachable from a rival
   raidBonusMult: 1.5,    // signing-bonus premium to raid a rival's scholar
   raidBudgetHit: 3,      // rival influence budget lost per poached scholar
@@ -81,7 +85,7 @@ const TANKS = [
     align:-2, alignLabel:'Left', size:'MEDIUM', diff:'Medium',
     blurb:'Runs on cold brew and five-point plans. Everyone on staff is either 29 or 63.',
     cash:900, rent:45, scholars:3, ops:2, influence:25,
-    donors:['billionaires'], budget:30, tags:['HLTH','CLIM','TECH'],
+    donors:['assembly'], budget:30, tags:['HLTH','CLIM','TECH'],
   },
   {
     id:'hand', name:'The Invisible Hand Society', short:'The Hand',

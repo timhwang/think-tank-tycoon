@@ -398,6 +398,21 @@ body {
 .subhead-sm { font-size: 12px; font-style: italic; }
 .paperbtnrow { text-align: center; margin-top: 14px; }
 
+/* ---------- instant tooltip ---------- */
+#tooltip {
+  position: fixed;
+  z-index: 300;
+  background: #ffffe1;
+  color: #000;
+  border: 1px solid #000;
+  box-shadow: 2px 2px 0 #00000066;
+  padding: 4px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  max-width: 280px;
+  pointer-events: none;
+}
+
 /* ---------- programs popup ---------- */
 #progWin {
   position: fixed;
