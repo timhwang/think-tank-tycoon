@@ -131,6 +131,29 @@ ICONS = {
     'scholar_11': 'a thoughtful man in a tweed jacket holding an unlit pipe',
     'scholar_12': 'a cheerful bald man wearing a conference lanyard and a flag lapel pin',
 
+    # ---- fights 21-30 ----
+    'fight_canal2':     'an excavator digging a canal trench through jungle with a tiny flag planted',
+    'fight_cea':        'a wooden podium bearing a round seal with a rising line chart emblem',
+    'fight_compost':    'a neoclassical government building with a steaming compost bin out front',
+    'fight_sfrotc':     'a cadet helmet with a small rocket orbiting it like a moon',
+    'fight_repair':     'a hospital heart monitor opened up with a wrench sticking out',
+    'fight_postcard':   'a postage stamp on a tiny folded tax form with a stubby pencil',
+    'fight_balloondef': 'a radar dish tracking a distant white balloon on a glowing green screen',
+    'fight_algo':       'a desktop computer monitor seated at a wooden witness stand with a microphone',
+    'fight_pumpkin':    'an underground concrete vault stacked with orange spiced lattes',
+    'fight_fonts':      'a giant serif letter being lowered into place by a construction crane',
+
+    # ---- donors 18-26 ----
+    'donor_booster':    'a ceramic piggy bank wearing a varsity letterman jacket',
+    'donor_carriers':   'a bathtub with nine tiny gray aircraft carriers floating in it',
+    'donor_disruption': 'a shattered lightbulb reassembling itself into a small rocket',
+    'donor_patients':   'a waiting-room chair beside a potted plant and a ticket dispenser',
+    'donor_grandmas':   'a knitted solar panel still on wooden knitting needles',
+    'donor_containers': 'a tidy cheerful stack of colorful shipping containers with a tiny pennant',
+    'donor_port':       'a polished brass anchor mounted on a wooden award plaque',
+    'donor_humane':     'a beige desktop computer wrapped snugly in a knitted blanket',
+    'donor_gilt':       'an ornate gilded picture frame containing a smaller gilded picture frame',
+
     # ---- ops staff by role, order matches OPS_ROLES in data.js (8) ----
     'ops_1': 'a young development associate buried behind a huge stack of donor envelopes',   # Development Associate
     'ops_2': 'an events coordinator wearing a headset and hugging a clipboard',              # Events Coordinator

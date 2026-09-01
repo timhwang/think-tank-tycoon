@@ -54,8 +54,13 @@ function genScholar(starter) {
   let name = genName(Math.random() < 0.75);
   let big = false;
   if (!starter && Math.random() < 0.12) { big = true; out += 10; }
+  // starters mostly share the shop's politics; the open market is a grab bag
+  const tSign = Math.sign(tank().align);
+  const r = Math.random();
+  const lean = starter ? ((tSign !== 0 && r < 0.6) ? tSign : 0)
+                       : (r < 0.3 ? -1 : r < 0.7 ? 0 : 1);
   return {
-    id: uid++, kind: 'scholar', name, big,
+    id: uid++, kind: 'scholar', name, big, lean,
     tag: pick(TAGS), salary: salary + (big ? 15 : 0), out,
     quirk: pick(SCHOLAR_QUIRKS),
     icon: 'scholar_' + ri(1, 12),
@@ -127,7 +132,7 @@ function newGame(tankId) {
     fightDeck: shuffle(FIGHTS.map(f => f.id)),
     donorDeck: shuffle(DONORS.map(d => d.id).filter(id => !t.donors.includes(id))),
     rivals: buildRivals(tankId),
-    log: [], negStreak: 0, over: false,
+    log: [], negStreak: 0, over: false, monthCommits: {},
     stats: { months: 0, won: 0, lost: 0, peakCash: t.cash },
   };
   PROGRAMS.forEach(p => G.programs[p.id] = false);
@@ -176,6 +181,7 @@ function demandText(d) {
   const dm = d.demand;
   if (dm.type === 'ROSTER') return `Wants a ${dm.tag} scholar on staff`;
   if (dm.type === 'PROGRAM') return `Wants the ${PROGRAMS.find(p => p.id === dm.pid).name} running`;
+  if (dm.type === 'ENGAGE') return `Wants ✦${dm.amt}/mo pushed into ${dm.tag} fights`;
   if (dm.type === 'NOCROSS') {
     const side = d.lean > 0 ? 'left' : 'right';
     return dm.tag ? `Never back ${side}-coded positions on ${dm.tag}` : `Never back ${side}-coded positions, period`;
@@ -187,6 +193,11 @@ function demandMet(d) {
   const dm = d.demand;
   if (dm.type === 'ROSTER') return G.scholars.some(s => s.tag === dm.tag);
   if (dm.type === 'PROGRAM') return !!G.programs[dm.pid];
+  if (dm.type === 'ENGAGE') {
+    const pushed = (G.monthCommits || {})[dm.tag] || 0;
+    const onBoard = G.fights.some(f => f.tag === dm.tag);
+    return pushed >= dm.amt || !onBoard; // forgiven when their issue isn't up
+  }
   return true; // NOCROSS strikes are event-driven at commit time
 }
 
@@ -199,11 +210,58 @@ function angeredBy(fight, side) {
     !fight.crossed[d.id]);
 }
 
+// partisan fit: matching leans discount a hire/courtship, crossing costs extra
+function fitMult(lean, matchMult, opposeMult) {
+  const m = (lean || 0) * Math.sign(tank().align);
+  return m > 0 ? matchMult : m < 0 ? opposeMult : 1;
+}
+
+function hireBonus(h) {
+  const base = h.salary * TUNE.signingMonths;
+  if (h.kind !== 'scholar') return Math.ceil(base);
+  return Math.ceil(base * fitMult(h.lean, TUNE.hireMatchMult, TUNE.hireOpposeMult));
+}
+
+function courtCost(d) {
+  return Math.ceil(d.cost * fitMult(d.lean, TUNE.donorMatchMult, TUNE.donorOpposeMult));
+}
+
+// glyph for a price the player's politics moved
+function fitMark(lean) {
+  const m = (lean || 0) * Math.sign(tank().align);
+  return m > 0 ? ' <span class="ok" title="Shares your politics: discounted">▼</span>'
+       : m < 0 ? ' <span class="warn" title="Crosses the aisle: premium">▲</span>' : '';
+}
+
+// matching scholars amplify influence committed to a fight of their tag
+function expertiseMult(tag) {
+  const n = G.scholars.filter(s => s.tag === tag).length;
+  return 1 + Math.min(TUNE.expertiseCap, TUNE.expertisePerScholar * n);
+}
+
+// rewards were plain cash numbers in early saves; normalize
+function fightReward(f) {
+  const r = f.reward;
+  if (typeof r === 'number') return { cash: r, inf: 0, special: null };
+  return { cash: r.cash || 0, inf: r.inf || 0, special: r.special || null };
+}
+
+function rewardText(f) {
+  const r = fightReward(f);
+  const parts = [];
+  if (r.cash) parts.push(fmtMoney(r.cash));
+  if (r.inf) parts.push(`✦${r.inf}`);
+  if (r.special === 'scholar') parts.push('🎓 scholar');
+  if (r.special === 'donorlead') parts.push('🤝 intro');
+  if (r.special === 'absolve') parts.push('😇 amnesty');
+  return parts.join(' + ') || '—';
+}
+
 // ---------- player actions ----------
 function actHire(idx) {
   const h = G.hireMarket[idx];
   if (!h) return;
-  const bonus = h.salary * TUNE.signingMonths;
+  const bonus = hireBonus(h);
   if (G.cash < bonus) return flash(`Signing bonus is ${fmtMoney(bonus)}. You don’t have it.`);
   G.cash -= bonus;
   G.hireMarket.splice(idx, 1);
@@ -229,8 +287,9 @@ function actFire(kind, id) {
 function actCourt(idx) {
   const d = G.donorMarket[idx];
   if (!d) return;
-  if (G.influence < d.cost) return flash(`Courting ${d.name} takes ${d.cost} influence. You have ${G.influence}.`);
-  G.influence -= d.cost;
+  const cost = courtCost(d);
+  if (G.influence < cost) return flash(`Courting ${d.name} takes ${cost} influence. You have ${G.influence}.`);
+  G.influence -= cost;
   G.donorMarket.splice(idx, 1);
   d.joined = G.month;
   G.donors.push(d);
@@ -273,8 +332,11 @@ function actCommit(fightIdx, sideIdx, amt) {
     });
   }
   G.influence -= amt;
-  side.total += amt;
-  side.yours += amt;
+  const eff = Math.round(amt * expertiseMult(f.tag));
+  side.total += eff;
+  side.yours += eff;
+  G.monthCommits = G.monthCommits || {};
+  G.monthCommits[f.tag] = (G.monthCommits[f.tag] || 0) + eff;
   save(); render();
 }
 
@@ -368,9 +430,13 @@ function endMonth() {
   while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
   while (G.fights.length < TUNE.fightSlots) drawFight();
 
-  // 9. slow news day?
-  if (Math.random() < TUNE.flavorChance) news.push({ h: pick(FLAVOR_HEADLINES), s: '' });
+  // 9. slow news day? the three branches never disappoint
+  if (Math.random() < TUNE.flavorChance) {
+    shuffle(FLAVOR_NEWS).slice(0, Math.random() < 0.4 ? 2 : 1)
+      .forEach(p => news.push({ h: p.h, s: p.s }));
+  }
 
+  G.monthCommits = {}; // engagement ledger resets after demands were judged
   G.month++;
   G.stats.peakCash = Math.max(G.stats.peakCash, G.cash);
   save(); render();
@@ -386,12 +452,31 @@ function resolveFight(f, news) {
 
   if (winner.yours > 0) {
     const share = winner.total > 0 ? winner.yours / winner.total : 1;
-    const pay = Math.round(f.reward * share);
-    G.cash += pay;
+    const R = fightReward(f);
+    const gains = [];
+    if (R.cash) { const pay = Math.round(R.cash * share); G.cash += pay; gains.push(fmtMoney(pay)); }
+    if (R.inf) { const gain = Math.round(R.inf * share); G.influence += gain; gains.push(`✦${gain} of clout`); }
+    if (R.special === 'scholar') {
+      const sch = genScholar(false);
+      G.scholars.push(sch);
+      gains.push(`${sch.name} (${TAG_NAMES[sch.tag]}) joins the roster, gratis`);
+    } else if (R.special === 'donorlead') {
+      if (drawDonorToMarket()) {
+        const d = G.donorMarket[G.donorMarket.length - 1];
+        d.cost = Math.ceil(d.cost / 2);
+        d.lead = true;
+        gains.push(`a warm intro: ${d.name} appears in the donor market at half price`);
+      } else {
+        gains.push('a promise that “our people will call your people”');
+      }
+    } else if (R.special === 'absolve') {
+      G.donors.forEach(d => d.strikes = Math.max(0, d.strikes - 1));
+      gains.push('a grateful town forgets old grudges (all donor strikes −1)');
+    }
     G.stats.won++;
-    sub += ` ${tank().short} claims credit everywhere; grateful allies deliver ${fmtMoney(pay)} in grants.`;
+    sub += ` ${tank().short} claims credit everywhere. The spoils: ${gains.join('; ')}.`;
     news.push({ h: `${f.title.toUpperCase()} — RESOLVED`, s: sub, big: true });
-    logLine(`WIN: ${f.title} → ${fmtMoney(pay)} (your share of the winning side: ${Math.round(share * 100)}%).`);
+    logLine(`WIN: ${f.title} → ${gains.join('; ')} (${Math.round(share * 100)}% of the winning side).`);
   } else if (loser.yours > 0) {
     G.stats.lost++;
     sub += ` ${tank().short} spent ${loser.yours} influence on the losing side. A fellow calls it “directionally correct.”`;
@@ -500,7 +585,7 @@ function renderStaff(cap) {
         ${iconImg(s.icon)}
         <div class="pcontent">
           <div class="pline">
-            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)}
+            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)} ${leanChip(s.lean || 0)}
             ${supported ? '' : '<span class="warn" title="No ops support — producing at half rate">⚠ half rate</span>'}
           </div>
           <div class="pline dim">✦ ${supported ? s.out : Math.floor(s.out * TUNE.unsupportedMult)}/mo · ${fmtMoney(s.salary)}/mo</div>
@@ -553,13 +638,21 @@ function renderMyDonors() {
         <div class="pcontent">
           <div class="pline"><b>${d.name}</b> ${leanChip(d.lean)}</div>
           <div class="pline dim">${fmtMoney(d.grant)}/mo</div>
-          <div class="pline ${met ? 'ok' : 'warn'}">${met ? '✓' : '✗'} ${demandText(d)}</div>
+          <div class="pline ${met ? 'ok' : 'warn'}">${met ? '✓' : '✗'} ${demandText(d)}${d.demand.type === 'ENGAGE' ? ` <span class="dim">(this month: ✦${(G.monthCommits || {})[d.demand.tag] || 0})</span>` : ''}</div>
           <div class="pline dim">Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, TUNE.strikeLimit - d.strikes))}${d.strikes === TUNE.strikeLimit - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>
           <button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>
         </div>
       </div>`;
   });
   $('#myDonorsBody').innerHTML = rows.join('') || '<div class="empty">No funders. The treasury drains.</div>';
+}
+
+// shown on fight cards when your bench amplifies commits there
+function expertiseChip(tag) {
+  const n = G.scholars.filter(s => s.tag === tag).length;
+  if (!n) return '';
+  const pct = Math.round((expertiseMult(tag) - 1) * 100);
+  return ` <span class="chip on" title="${n} ${tag} scholar${n > 1 ? 's' : ''} on staff amplify influence you commit here">★ +${pct}%</span>`;
 }
 
 // who's behind each side of a fight, sorted big to small
@@ -582,7 +675,7 @@ function renderFights() {
       <div class="card fightcard">
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
-          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold">🏆 ${fmtMoney(f.reward)}</span></div>
+          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
           <div class="tug"><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
@@ -647,10 +740,10 @@ function renderHireMarket() {
           <div class="cardbody mrow">
             ${iconImg(h.icon)}
             <div class="mcontent">
-              <div class="pline">${tagChip(h.tag)} <span class="dim">${TAG_NAMES[h.tag]}</span></div>
+              <div class="pline">${tagChip(h.tag)} ${leanChip(h.lean || 0)}</div>
               <div class="pline">✦ ${h.out}/mo · ${fmtMoney(h.salary)}/mo</div>
               <div class="pline quirk">${h.quirk}</div>
-              <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(h.salary * TUNE.signingMonths)} bonus)</button>
+              <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>${fitMark(h.lean)}
             </div>
           </div>
         </div>`;
@@ -664,7 +757,7 @@ function renderHireMarket() {
             <div class="pline"><span class="chip">OPS</span> <span class="dim">${h.role}</span></div>
             <div class="pline">Supports ${h.supports} scholars · ${fmtMoney(h.salary)}/mo</div>
             <div class="pline quirk">${h.quirk}</div>
-            <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(h.salary * TUNE.signingMonths)} bonus)</button>
+            <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>
           </div>
         </div>
       </div>`;
@@ -678,10 +771,10 @@ function renderDonorMarket() {
       <div class="cardbody mrow">
         ${iconImg('donor_' + d.id)}
         <div class="mcontent">
-          <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b></div>
+          <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b>${d.lead ? ' <span class="chip want" title="Won in a policy fight: half-price courtship">WARM INTRO</span>' : ''}</div>
           <div class="pline warn">Demands: ${demandText(d)}</div>
           <div class="pline quirk">${d.blurb}</div>
-          <button class="btn tiny" data-act="court" data-idx="${i}" ${G.influence < d.cost ? 'disabled' : ''}>Court (✦ ${d.cost})</button>
+          <button class="btn tiny" data-act="court" data-idx="${i}" ${G.influence < courtCost(d) ? 'disabled' : ''}>Court (✦ ${courtCost(d)})</button>${fitMark(d.lean)}
         </div>
       </div>
     </div>`).join('');
