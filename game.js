@@ -561,8 +561,8 @@ function resolveFight(f, news) {
 
 function standings() {
   const rows = [
-    { short: tank().short, name: tank().name, v: G.stats.won, you: true },
-    ...G.rivals.map(r => ({ short: r.short, name: r.name, v: r.victories || 0, you: false })),
+    { short: tank().short, name: tank().name, v: G.stats.won, you: true, align: tank().align },
+    ...G.rivals.map(r => ({ short: r.short, name: r.name, v: r.victories || 0, you: false, align: r.align })),
   ];
   rows.sort((x, y) => y.v - x.v || (x.you ? -1 : y.you ? 1 : 0)); // you win ties
   return rows;
@@ -691,10 +691,10 @@ function render() {
 }
 
 function renderStaff(cap) {
-  const rows = [];
+  const scholars = [];
   G.scholars.forEach((s, i) => {
     const supported = i < cap;
-    rows.push(`
+    scholars.push(`
       <div class="person ${supported ? '' : 'unsup'}">
         ${iconImg(s.icon)}
         <div class="pcontent">
@@ -708,10 +708,9 @@ function renderStaff(cap) {
         </div>
       </div>`);
   });
-  if (!G.scholars.length) rows.push('<div class="empty">No scholars. No scholars, no influence.</div>');
-  rows.push('<div class="subdivider">OPERATIONS</div>');
+  const ops = [];
   G.ops.forEach(o => {
-    rows.push(`
+    ops.push(`
       <div class="person">
         ${iconImg(o.icon)}
         <div class="pcontent">
@@ -722,11 +721,18 @@ function renderStaff(cap) {
         </div>
       </div>`);
   });
-  if (!G.ops.length) rows.push('<div class="empty">No ops staff. Scholars are wandering the halls unsupported.</div>');
-  $('#staffBody').innerHTML = rows.join('');
+  $('#staffBody').innerHTML =
+    (scholars.length ? `<div class="persongrid">${scholars.join('')}</div>`
+      : '<div class="empty">No scholars. No scholars, no influence.</div>') +
+    '<div class="subdivider">OPERATIONS</div>' +
+    (ops.length ? `<div class="persongrid">${ops.join('')}</div>`
+      : '<div class="empty">No ops staff. Scholars are wandering the halls unsupported.</div>');
 }
 
 function renderPrograms() {
+  const running = PROGRAMS.filter(p => G.programs[p.id]).length;
+  const btn = $('#progBtn');
+  if (btn) btn.textContent = `PROGRAMS (${running} ON)`;
   $('#programsBody').innerHTML = PROGRAMS.map(p => {
     const on = G.programs[p.id];
     const wanted = G.donors.some(d => d.demand.type === 'PROGRAM' && d.demand.pid === p.id);
@@ -824,8 +830,9 @@ function renderReport() {
   const lbRows = standings().map((row, i) => {
     const budget = row.you ? `+${production()}` : `~${G.rivals.find(r => r.short === row.short).budget}`;
     return `<tr class="${row.you ? 'you' : ''}">
-      <td>${i + 1}</td>
+      <td class="rank">${i + 1}</td>
       <td>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}${row.you ? ' ★' : ''}</td>
+      <td>${leanChip(row.align)}</td>
       <td class="amt">${row.v}</td>
       <td class="amt dim">✦${budget}</td>
     </tr>`;
@@ -849,7 +856,7 @@ function renderReport() {
     <div class="pline dim">${Math.min(G.scholars.length, cap)}/${G.scholars.length} scholars supported</div>
     <div class="subdivider">LEADERBOARD — POLICY VICTORIES</div>
     <table class="ledger lb">
-      <tr class="lbhead"><td>#</td><td>TANK</td><td class="amt">W</td><td class="amt">✦/mo</td></tr>
+      <tr class="lbhead"><td>#</td><td>TANK</td><td>LEAN</td><td class="amt">W</td><td class="amt">✦/mo</td></tr>
       ${lbRows}
     </table>`;
 }
@@ -937,6 +944,7 @@ document.addEventListener('click', e => {
     }
   }
   else if (act === 'help') $('#helpWin').classList.toggle('hidden');
+  else if (act === 'progwin') $('#progWin').classList.toggle('hidden');
 });
 
 // ---------- boot ----------

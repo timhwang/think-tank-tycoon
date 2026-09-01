@@ -139,7 +139,8 @@ body {
   margin-bottom: 6px;
   align-items: start;
 }
-.rowtop { grid-template-columns: minmax(430px, 1.7fr) minmax(250px, 1fr) minmax(250px, 1fr); }
+.rowtop { grid-template-columns: minmax(430px, 1.7fr) minmax(250px, 1fr) minmax(250px, 1fr); align-items: stretch; }
+.rowtop .wbody { max-height: none; flex: 1; min-height: 0; overflow-y: auto; }
 .rowbottom { grid-template-columns: 2.6fr minmax(260px, 1fr); }
 
 .window { display: flex; flex-direction: column; min-width: 0; }
@@ -151,10 +152,13 @@ body {
 /* your institution: three internal columns */
 .shopgrid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr;
   gap: 10px;
 }
-.shopcol { min-width: 0; max-height: 330px; overflow-y: auto; padding-right: 2px; }
+.shopcol { min-width: 0; }
+.persongrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; align-items: start; }
+.persongrid .person { margin-bottom: 0; }
+.titlebar .tbbtn { font-size: 9px; padding: 0 6px; margin-left: 8px; letter-spacing: 0; }
 
 /* SC2K-ish chunky scrollbars */
 .wbody::-webkit-scrollbar, .shopcol::-webkit-scrollbar { width: 14px; }
@@ -243,20 +247,24 @@ body {
 .hirecard.ops { background: #bbc3cb; }
 .hirecard.donor { background: #cbc3ae; }
 
-/* ---------- fights ---------- */
-.fightcard { background: #c7c7ce; }
-.fightmeta { margin-bottom: 5px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+/* ---------- fights (compact: four cards, no scrollbar) ---------- */
+.fightcard { background: #c7c7ce; margin-bottom: 4px; }
+.fightcard:last-child { margin-bottom: 0; }
+.fightcard .cardhead { font-size: 10px; padding: 2px 5px; }
+.fightcard .cardbody { padding: 3px 6px 4px 6px; }
+.fightcard .btn.tiny { margin-top: 0; padding: 0 5px; }
+.fightmeta { margin-bottom: 2px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .ftype { font-family: 'Silkscreen', Verdana, sans-serif; font-size: 8px; padding: 1px 4px; background: #fff; color: #000; flex: none; }
 .ftype.EO { background: #ffd98a; }
 .ftype.NOM { background: #b9d7ff; }
 
 .tug {
-  height: 14px;
+  height: 10px;
   background: #9b1414;
   border: 2px solid;
   border-top-color: var(--win-dkr); border-left-color: var(--win-dkr);
   border-right-color: var(--win-lt); border-bottom-color: var(--win-lt);
-  margin: 4px 0 6px 0;
+  margin: 2px 0 4px 0;
   position: relative;
 }
 .tugA { height: 100%; background: #14329b; border-right: 2px solid #fff; }
@@ -265,19 +273,22 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 0 0 0;
+  padding: 0;
   flex-wrap: wrap;
 }
-.sidelabel { flex: 1 1 55%; min-width: 180px; }
+.sidelabel { flex: 1 1 55%; min-width: 150px; }
 .sidenums { font-weight: bold; white-space: nowrap; }
 .sidebtns { display: flex; gap: 3px; }
-.backers { font-size: 9px; margin: 0 0 5px 14px; }
+.backers { font-size: 8px; margin: 0 0 2px 12px; }
+.expnote { font-size: 9px; margin: 0 0 2px 0; }
 
 /* ---------- ledger table ---------- */
 .ledger { width: 100%; border-collapse: collapse; font-size: 11px; }
 .ledger td { padding: 2px 2px; border-bottom: 1px dotted #999; }
 .ledger td.amt { text-align: right; font-weight: bold; white-space: nowrap; }
 .ledger tr.net td { border-top: 2px solid var(--win-dk); border-bottom: none; font-weight: bold; }
+
+.report { max-height: none; }
 
 /* ---------- leaderboard ---------- */
 .lb .you td { font-weight: bold; background: #d8d4b8; }
@@ -315,9 +326,9 @@ body {
 #startDialog { max-width: 1080px; width: 100%; }
 #resumeBox { max-width: 1080px; width: 100%; margin-top: 10px; }
 #goalBox { max-width: 1080px; width: 100%; margin-bottom: 10px; }
-.goaltext { font-size: 12px; text-align: center; padding: 10px 16px; line-height: 1.5; }
+.goaltext { font-size: 13px; text-align: center; padding: 12px 18px; line-height: 1.55; }
+.goaltext p { max-width: 700px; margin: 7px auto; }
 #continueRow { text-align: center; margin: 10px 0; }
-.expnote { margin-bottom: 4px; }
 #tankPicker {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -387,6 +398,18 @@ body {
 .subhead-sm { font-size: 12px; font-style: italic; }
 .paperbtnrow { text-align: center; margin-top: 14px; }
 
+/* ---------- programs popup ---------- */
+#progWin {
+  position: fixed;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(430px, 92vw);
+  z-index: 92;
+  box-shadow: 6px 6px 0 #00000066;
+}
+#progWin .wbody { max-height: 70vh; }
+
 /* ---------- help window ---------- */
 #helpWin {
   position: fixed;
@@ -410,5 +433,7 @@ body {
   .rowtop { grid-template-columns: 1fr; }
   .rowtop .window:first-child { grid-column: auto; }
   .shopgrid { grid-template-columns: 1fr; }
-  .shopcol { max-height: none; }
+}
+@media (max-width: 700px) {
+  .persongrid { grid-template-columns: 1fr; }
 }

@@ -27,9 +27,9 @@
   <div class="window" id="goalBox">
     <div class="titlebar">THE ASSIGNMENT <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
     <div class="wbody goaltext">
-      <b>January 2027 → Election Night, November 2028.</b> Bank the <b>most policy victories</b> before the country votes and be crowned the most influential think tank in Washington.
-      A victory goes to whichever institution carried the winning side hardest — so every fight is a bidding war for credit.
-      Scholars mint influence; influence wins fights and courts donors; donors fund scholars. Every point you spend on glory is a point you didn't invest in the machine. Fold early, and the election proceeds without you.
+      <p><b>January 2027 → Election Night, November 2028.</b> Bank the <b>most policy victories</b> before the country votes and be crowned the most influential think tank in Washington.</p>
+      <p>Scholars mint influence; influence wins fights and courts donors; donors fund scholars.</p>
+      <p>A victory goes to whichever institution carried the winning side hardest — so every fight is a bidding war for credit. Every point you spend on glory is a point you didn't invest in the machine.</p>
     </div>
   </div>
   <div class="window" id="startDialog">
@@ -65,25 +65,24 @@
     <div class="row rowtop">
       <div class="window">
         <div class="titlebar">POLICY FIGHTS <span class="deckcount" id="fightDeckCount"></span><span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody tall" id="fightsBody"></div>
+        <div class="wbody" id="fightsBody"></div>
       </div>
       <div class="window">
         <div class="titlebar">HIRING MARKET <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody tall" id="hireBody"></div>
+        <div class="wbody" id="hireBody"></div>
       </div>
       <div class="window">
         <div class="titlebar">DONOR MARKET <span class="deckcount" id="donorDeckCount"></span><span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
-        <div class="wbody tall" id="donorMarketBody"></div>
+        <div class="wbody" id="donorMarketBody"></div>
       </div>
     </div>
 
     <!-- bottom row: your institution and the report -->
     <div class="row rowbottom">
       <div class="window">
-        <div class="titlebar">YOUR INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+        <div class="titlebar">YOUR INSTITUTION <button class="btn tiny tbbtn" id="progBtn" data-act="progwin">PROGRAMS</button> <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
         <div class="wbody shopgrid">
-          <div class="shopcol"><div class="subdivider">STAFF</div><div id="staffBody"></div></div>
-          <div class="shopcol"><div class="subdivider">PROGRAMS</div><div id="programsBody"></div></div>
+          <div class="shopcol staffcol"><div class="subdivider">STAFF</div><div id="staffBody"></div></div>
           <div class="shopcol"><div class="subdivider">DONORS</div><div id="myDonorsBody"></div></div>
         </div>
       </div>
@@ -113,6 +112,12 @@
     <div id="paperRest"></div>
     <div class="paperbtnrow"><button class="btn big" id="paperBtn" data-act="closepaper">Continue</button></div>
   </div>
+</div>
+
+<!-- ================= PROGRAMS WINDOW ================= -->
+<div id="progWin" class="window hidden">
+  <div class="titlebar">PROGRAMS <span class="widgets"><span data-act="progwin" style="cursor:pointer">✕</span></span></div>
+  <div class="wbody" id="programsBody"></div>
 </div>
 
 <!-- ================= HELP WINDOW ================= -->
