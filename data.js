@@ -13,8 +13,9 @@ const TUNE = {
   strikeLimit: 2,        // strikes before a donor walks
   unsupportedMult: 0.5,  // output multiplier for unsupported scholars
   flavorChance: 0.45,    // chance the Bugle runs dysfunction headlines each month
-  expertisePerScholar: 0.10, // commit bonus per scholar matching a fight's tag...
-  expertiseCap: 0.5,         // ...capped here
+  expertisePerScholar: 0.12, // commit bonus per scholar matching a fight's tag...
+  expertiseCap: 0.6,         // ...capped here
+  warroomBonus: 0.15,        // War Room program: flat bonus on all commits
   hireMatchMult: 0.5,    // signing bonus mult when a scholar shares your lean
   hireOpposeMult: 1.5,   // ...and when they cross the aisle to join you
   donorMatchMult: 0.7,   // court cost mult when a donor shares your lean
@@ -33,10 +34,17 @@ const TUNE = {
   grantTermMax: 20,      // ...to this many, then the donor departs amicably
   grantMult: 0.8,        // global scaler on donor grants (applied when courted)
   fightCashMult: 0.7,    // global scaler on fight cash rewards (applied at draw)
-  rivalBudgetMult: 0.76, // global scaler on rival influence budgets
-  rivalCloserMult: 3,    // rivals weight fights in their final month this much harder
+  rivalBudgetMult: 0.72, // global scaler on rival influence budgets
+  rivalFlat: 14,         // rival budget = (flat + base*slope) * mult...
+  rivalSlope: 0.5,       // ...flat>0 compresses the spread between big and small tanks
+  rivalCloserMult: 2.2,  // rivals weight fights in their final month this much harder
+  rivalFocus: 0.45,      // odds a rival sits out a fight outside its pet issues
+  contestK: 3.2,         // resolution odds curve: P = A^k/(A^k+B^k); higher = less upset-prone
+  crisisChance: 0.16,    // monthly odds a crisis lands (never two at once)
+  electionSeasonStart: 16, // month index when election season begins (6 months out)
+  electionSeasonMult: 1.5, // rival budgets scale by this during election season
   courtCostMult: 1.5,    // global scaler on donor courting costs
-  scholarOutMult: 1,     // global scaler on scholar influence output
+  scholarOutMult: 1.08,  // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
   prospectHireCost: 80,  // base cash to sweep the hiring market...
   prospectHireInf: 10,   // ...plus influence (headhunters want intros too)
@@ -44,6 +52,7 @@ const TUNE = {
   prospectDonorInf: 15,  // ...plus influence (cultivation dinners run on favors)
   prospectEscalate: 0.5, // each prior sweep of that market adds this x base
   divaChance: 0.08,      // odds a market scholar is a brilliant nightmare
+  dudChance: 0.18,       // odds a market scholar is an insanely bad deal (read the stats)
   divaQuitChance: 0.12,  // monthly odds each diva drives a colleague out
   opsBoonChance: 0.28,   // odds an ops hire carries a bonus trait
   opsFlawChance: 0.15,   // odds an ops hire carries a deficit instead
@@ -89,7 +98,7 @@ const TANKS = [
     motto:'Markets Have Feelings Too.',
     align:1, alignLabel:'Center-Right', size:'MEDIUM', diff:'Medium',
     blurb:'Tweedy, respectable, pro-business. Hosts the politest disagreements in town, with sandwiches.',
-    cash:1000, rent:45, scholars:3, ops:2, influence:25,
+    cash:1100, rent:45, scholars:3, ops:2, influence:35,
     donors:['retail'], budget:30, tags:['TAX','TRADE','TECH'],
   },
   {
@@ -105,7 +114,7 @@ const TANKS = [
     motto:'Leave Us Alone. Also, Fund Us.',
     align:1, alignLabel:'Libertarian', size:'SMALL', diff:'Hard',
     blurb:'Six people with four opinions each. The newsletter is, by all accounts, legendary.',
-    cash:450, rent:25, scholars:2, ops:1, influence:30,
+    cash:520, rent:25, scholars:2, ops:1, influence:40,
     donors:['ashgrove'], budget:18, tags:['TAX','TECH','TRADE'],
   },
   {
@@ -113,7 +122,7 @@ const TANKS = [
     motto:'Small Is Beautiful. So Is Our Budget.',
     align:0, alignLabel:'Post-Liberal', size:'TINY', diff:'Expert',
     blurb:'Three converts and a fax machine, arguing that everything went wrong in 1789.',
-    cash:340, rent:15, scholars:1, ops:1, influence:50,
+    cash:360, rent:15, scholars:1, ops:1, influence:55,
     donors:[], budget:10, tags:['HLTH','TECH'],
   },
 ];
@@ -225,13 +234,13 @@ const PROGRAMS = [
     blurb:'Episode 44: “So, Walk Me Through the Paper.”' },
   { id:'lobby', name:'Marble Lobby & Donor Wall', cost:8, inf:0,
     blurb:'Names engraved in order of generosity.' },
-  { id:'journal', name:'House Policy Journal', cost:12, inf:5,
+  { id:'journal', name:'House Policy Journal', cost:12, inf:7,
     blurb:'Peer-reviewed by whoever is in the kitchenette.' },
   { id:'warroom', name:'The War Room', cost:10, inf:0,
-    blurb:'A map, some string, unlimited pushpins. All fight commits +10%.' },
+    blurb:'A map, some string, unlimited pushpins. All fight commits +15%.' },
   { id:'fellows', name:'Junior Fellows Program', cost:12, inf:0,
     blurb:'They are all named Tyler. Every sixth month, one becomes a real scholar.' },
-  { id:'chair', name:'Endowed Chair in Applied Foresight', once:400, cost:4, inf:8,
+  { id:'chair', name:'Endowed Chair in Applied Foresight', once:400, cost:4, inf:10,
     blurb:'Named for the donor’s late opinions. Permanent, prestigious, productive.' },
   { id:'wing', name:'The West Annex', once:500, cost:0, inf:0,
     blurb:'Owning your floor beats renting four of them. Rent halved, forever.' },
@@ -372,6 +381,16 @@ const OPS_ROLES = [
   'Office Manager','Executive Assistant to the President','AV Guy (Indispensable)','Intern Wrangler',
 ];
 
+// résumé-inflation lines for the market's bad apples — the numbers are the tell
+const DUD_QUIRKS = [
+  'Advises four governments; none can say on what.',
+  'The book is “forthcoming.” It has been forthcoming since 2019.',
+  '“Thought leader,” per their own bio.',
+  'Charges keynote rates for staff meetings.',
+  'Best known for being frequently introduced.',
+  'Their last big idea was an acronym.',
+];
+
 const OPS_QUIRKS = [
   'Runs the whole place. Titled “Associate.”',
   'Knows where the good conference room is.',
@@ -381,6 +400,91 @@ const OPS_QUIRKS = [
   'The only one who can work the projector.',
   'Keeps a burner umbrella for every fellow.',
   'Reads the footnotes. All of them.',
+];
+
+// ------------------------------------------------------------
+// Crisis deck: one may land at month's end; you must choose before the
+// next END MONTH. Text lives here; the teeth live in CRISIS_FX (game.js).
+// Placeholders: {SCHOLAR} {TOP} {DIVA} {OPS} {DONOR} {DONOR_B} {RIVAL}.
+// Every crisis keeps at least one choice with no resource cost.
+// ------------------------------------------------------------
+const CRISES = [
+  { id:'oped', title:'THE OLD OP-EDS SURFACE',
+    body:'A viral thread unearths {SCHOLAR}’s spicier collected works. Donors are calling. The interns have made a supercut.',
+    choices: [
+      { label:'Stand by them', hint:'Ideologically offended donors each take a strike' },
+      { label:'Quietly part ways', hint:'{SCHOLAR} leaves. No severance, no statement' },
+      { label:'Damage-control blitz', inf:40, hint:'✦40, and by Friday it never happened' },
+    ] },
+  { id:'feud', title:'FUNDER FEUD',
+    body:'{DONOR} and {DONOR_B} were seated at the same dinner. It went badly. Each now insists you drop the other.',
+    choices: [
+      { label:'Side with {DONOR}', hint:'{DONOR_B} walks immediately' },
+      { label:'Side with {DONOR_B}', hint:'{DONOR} walks immediately' },
+      { label:'Host a unity retreat', cash:60, inf:25, hint:'Both stay. Nobody apologizes' },
+    ] },
+  { id:'meltdown', title:'DIVA MELTDOWN',
+    body:'{DIVA} has read the seating chart for the annual dinner and is now “re-evaluating everything.” HR has a folder.',
+    choices: [
+      { label:'Fire the diva', hint:'{DIVA} leaves; the office exhales' },
+      { label:'Grand apology tour', cash:30, inf:30, hint:'Flowers, an office upgrade, a personal podcast' },
+      { label:'Let it burn', hint:'Two colleagues quit by Friday' },
+    ] },
+  { id:'shutdown', title:'GOVERNMENT SHUTDOWN',
+    body:'Congress fails to fund the government. Nothing moves on the Hill next month — fight clocks freeze. Payroll, notably, does not.',
+    choices: [
+      { label:'Ride it out', hint:'All fight clocks freeze for a month' },
+      { label:'Emergency convening circuit', cash:50, hint:'Clocks still freeze, but the panels mint ✦20' },
+    ] },
+  { id:'recess', title:'SURPRISE RECESS',
+    body:'Leadership abruptly crams every pending item into one frantic session. Everything on the board resolves at the next END MONTH.',
+    choices: [
+      { label:'Brace', hint:'Every fight’s clock drops to 1 month' },
+      { label:'War footing', cash:40, hint:'Same, but the scramble mints ✦15 now' },
+    ] },
+  { id:'galafire', title:'GALA ETHICS COMPLAINT',
+    body:'A watchdog notes that your gala’s “VIP access packages” resemble, in their words, “a menu.” The story has legs.',
+    choices: [
+      { label:'Lawyer up', cash:80, hint:'The gala survives; the lawyers thrive' },
+      { label:'Shut the gala down', hint:'Program off — its donors will notice' },
+    ] },
+  { id:'hack', title:'SERVER HACK',
+    body:'A ransomware note, in Comic Sans, says your donor database is encrypted. The AV Guy says he had one job and this wasn’t technically it.',
+    choices: [
+      { label:'Pay the ransom', cash:70, hint:'Everything back by Monday' },
+      { label:'Rebuild from paper', hint:'{OPS} quits in the chaos, and the scramble costs ✦15' },
+    ] },
+  { id:'plagiarism', title:'PLAGIARISM FLAP',
+    body:'Sharp-eyed readers note that {TOP}’s latest white paper shares twelve paragraphs with a 2019 master’s thesis.',
+    choices: [
+      { label:'Retract and retrain', inf:10, hint:'{TOP}’s output drops 5, permanently' },
+      { label:'Deny everything, loudly', inf:35, hint:'Expensive, but the file closes' },
+      { label:'Let them go', hint:'{TOP} leaves. No severance' },
+    ] },
+  { id:'revolt', title:'BOARD REVOLT',
+    body:'The board has seen the treasury. An emergency meeting is called. Someone has printed slides.',
+    choices: [
+      { label:'Accept austerity', hint:'Your highest-paid staffer is let go; the board wires $60k' },
+      { label:'Grovel effectively', inf:30, hint:'A $100k bridge gift, at the cost of ✦30 of dignity' },
+    ] },
+  { id:'smear', title:'RIVAL SMEAR CAMPAIGN',
+    body:'{RIVAL} has funded a “transparency project” about you. Its first report is unflattering and, worse, well-designed.',
+    choices: [
+      { label:'Stay above the fray', hint:'Your standing commitments on every fight erode 20%' },
+      { label:'Counter-oppo', cash:50, hint:'{RIVAL}’s influence budget takes a permanent −3' },
+    ] },
+  { id:'center', title:'{DONOR} WANTS A CENTER',
+    body:'{DONOR} would like their name on something. Specifically: a Center. There would be a plaque, and a ribbon, and remarks.',
+    choices: [
+      { label:'Build the Center', cash:120, hint:'Their grant rises $30k/mo and the cycle extends 6 months' },
+      { label:'Decline politely', hint:'{DONOR} takes a strike’s worth of offense' },
+    ] },
+  { id:'union', title:'THE INTERNS UNIONIZE',
+    body:'The interns have elected a steward, drafted demands, and — ominously — learned what everyone is paid.',
+    choices: [
+      { label:'Recognize the union', hint:'Every current ops salary +$1k/mo, permanently' },
+      { label:'Fight it', inf:30, hint:'✦30 of goodwill burned, and one ops staffer quits' },
+    ] },
 ];
 
 // No-effect Bugle items for slow news months: wonk life plus the three

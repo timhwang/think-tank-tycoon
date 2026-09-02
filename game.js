@@ -66,6 +66,13 @@ function genScholar(starter) {
     quirk: pick(SCHOLAR_QUIRKS),
     icon: 'scholar_' + ri(1, 12),
   };
+  // the market has bad apples: grand résumé, feeble numbers — no warning chip,
+  // the stats are the tell
+  if (!starter && !diva && !big && Math.random() < TUNE.dudChance) {
+    sch.out = Math.max(3, Math.round(sch.out * 0.45));
+    sch.salary += ri(0, 6);
+    sch.quirk = pick(DUD_QUIRKS);
+  }
   // some market scholars are sitting at a rival right now — hiring is a raid
   if (!starter && G && G.rivals && G.rivals.length && Math.random() < TUNE.raidChance) {
     sch.from = pick(G.rivals).short;
@@ -93,6 +100,7 @@ function genOps(starter) {
   if (!starter) {
     if (t < TUNE.opsBoonChance) { trait = pick(OPS_TRAITS.slice(0, 3)); salary += 2; }
     else if (t < TUNE.opsBoonChance + TUNE.opsFlawChance) { trait = OPS_TRAITS[3]; salary = Math.max(5, salary - 2); }
+    else if (Math.random() < 0.12) salary += ri(4, 8); // plain overpriced, no upside
   }
   return {
     id: uid++, kind: 'ops', name: genName(false),
@@ -105,7 +113,9 @@ function genOps(starter) {
 function buildRivals(chosenId) {
   const mk = t => ({
     short: t.short, name: t.name, align: t.align,
-    budget: Math.round(t.budget * TUNE.rivalBudgetMult), tags: t.tags,
+    // flat+slope compresses the spread so no single giant hoovers the wins
+    budget: Math.round((TUNE.rivalFlat + t.budget * TUNE.rivalSlope) * TUNE.rivalBudgetMult),
+    tags: t.tags,
     victories: 0,
   });
   const rivals = TANKS.filter(t => t.id !== chosenId).map(mk);
@@ -166,7 +176,8 @@ function newGame(tankId) {
     fightDeck: shuffle(FIGHTS.map(f => f.id)),
     donorDeck: shuffle(DONORS.map(d => d.id).filter(id => !t.donors.includes(id))),
     rivals: buildRivals(tankId),
-    log: [], negStreak: 0, over: false, monthCommits: {}, progMonths: {}, prospects: {}, v: 2,
+    log: [], negStreak: 0, over: false, monthCommits: {}, progMonths: {}, prospects: {},
+    crisis: null, usedCrises: [], freeze: 0, v: 2,
     stats: { months: 0, won: 0, lost: 0, peakCash: t.cash },
   };
   PROGRAMS.forEach(p => G.programs[p.id] = false);
@@ -308,7 +319,16 @@ function fitTipDonor(d) {
 function expertiseMult(tag) {
   const n = G.scholars.filter(s => s.tag === tag).length;
   return 1 + Math.min(TUNE.expertiseCap, TUNE.expertisePerScholar * n)
-       + (G.programs.warroom ? 0.1 : 0);
+       + (G.programs.warroom ? TUNE.warroomBonus : 0);
+}
+
+// resolution odds: sharpened contest curve — a 2:1 influence lead wins ~85%,
+// 3:1 ~94%, but nothing is ever certain (except a walkover vs zero)
+function winProbA(f) {
+  const a = f.sides[0].total, b = f.sides[1].total;
+  if (a === 0 && b === 0) return 0.5;
+  const pa = Math.pow(a, TUNE.contestK), pb = Math.pow(b, TUNE.contestK);
+  return pa / (pa + pb);
 }
 
 // rewards were plain cash numbers in early saves; normalize
@@ -522,17 +542,177 @@ function actCommit(fightIdx, sideIdx, amt) {
 
 function flash(msg) { alert(msg); }
 
+// ---------- crises ----------
+const CRISIS_WHEN = {
+  oped: () => G.scholars.length >= 1,
+  feud: () => G.donors.some(d => d.lean > 0 && !d.lapsing) && G.donors.some(d => d.lean < 0 && !d.lapsing),
+  meltdown: () => G.scholars.some(s => s.diva),
+  shutdown: () => G.fights.length > 0 && !(G.freeze > 0),
+  recess: () => G.fights.some(f => f.monthsLeft > 1),
+  galafire: () => !!G.programs.gala,
+  hack: () => G.ops.length >= 1,
+  plagiarism: () => G.scholars.length >= 1,
+  revolt: () => G.cash < 300,
+  smear: () => true,
+  center: () => G.donors.some(d => !d.lapsing) && G.cash > 250,
+  union: () => G.ops.length >= 1,
+};
+
+function drawCrisis(news) {
+  let pool = CRISES.filter(c => !G.usedCrises.includes(c.id) && CRISIS_WHEN[c.id]());
+  if (!pool.length) { G.usedCrises = []; pool = CRISES.filter(c => CRISIS_WHEN[c.id]()); }
+  if (!pool.length) return;
+  const def = pick(pool);
+  G.usedCrises.push(def.id);
+  const topSch = [...G.scholars].sort((x, y) => y.out - x.out)[0];
+  const donorA = pick(G.donors.filter(d => d.lean > 0 && !d.lapsing)) || pick(G.donors.filter(d => !d.lapsing));
+  const donorB = pick(G.donors.filter(d => d.lean < 0 && !d.lapsing));
+  const c = {
+    id: def.id,
+    t: {
+      scholar: G.scholars.length ? pick(G.scholars).id : null,
+      top: topSch ? topSch.id : null,
+      diva: (G.scholars.find(s => s.diva) || {}).id ?? null,
+      ops: G.ops.length ? pick(G.ops).id : null,
+      donor: donorA ? donorA.id : null,
+      donorB: donorB ? donorB.id : null,
+      rival: pick(G.rivals).short,
+    },
+  };
+  const nameOf = (list, id, key) => { const x = list.find(v => v.id === id); return x ? x.name : '(someone)'; };
+  c.n = {
+    SCHOLAR: nameOf(G.scholars, c.t.scholar),
+    TOP: nameOf(G.scholars, c.t.top),
+    DIVA: nameOf(G.scholars, c.t.diva),
+    OPS: nameOf(G.ops, c.t.ops),
+    DONOR: nameOf(G.donors, c.t.donor),
+    DONOR_B: nameOf(G.donors, c.t.donorB),
+    RIVAL: c.t.rival,
+  };
+  G.crisis = c;
+  news.push({ h: `BUGLE EXTRA: ${crisisSub(def.title)}`, s: 'A decision is required before next month can begin.' });
+  logLine(`CRISIS: ${crisisSub(def.title)} — decide before the next END MONTH.`);
+}
+
+function crisisSub(text) {
+  if (!G.crisis) return text;
+  return text.replace(/\{(SCHOLAR|TOP|DIVA|OPS|DONOR_B|DONOR|RIVAL)\}/g, (m, k) => G.crisis.n[k] || '(someone)');
+}
+
+const CRISIS_FX = {
+  oped: [
+    c => { const s = G.scholars.find(x => x.id === c.t.scholar); const lean = s ? (s.lean || 0) : 0;
+      const angry = lean !== 0 ? G.donors.filter(d => d.lean * lean < 0) : shuffle(G.donors).slice(0, 2);
+      angry.forEach(d => d.strikes++);
+      return `${angry.length} donor${angry.length === 1 ? '' : 's'} took a strike's worth of offense.`; },
+    c => { G.scholars = G.scholars.filter(x => x.id !== c.t.scholar); return `${c.n.SCHOLAR} is gone by lunch.`; },
+    () => 'By Friday, it never happened.',
+  ],
+  feud: [
+    c => { G.donors = G.donors.filter(d => d.id !== c.t.donorB); return `${c.n.DONOR_B} walks.`; },
+    c => { G.donors = G.donors.filter(d => d.id !== c.t.donor); return `${c.n.DONOR} walks.`; },
+    () => 'The retreat featured trust falls. Both stay.',
+  ],
+  meltdown: [
+    c => { G.scholars = G.scholars.filter(x => x.id !== c.t.diva); return `${c.n.DIVA} is escorted out mid-monologue.`; },
+    () => 'The apology tour worked. For now.',
+    c => { const others = [...G.scholars.filter(s => s.id !== c.t.diva), ...G.ops]; const gone = shuffle(others).slice(0, 2);
+      gone.forEach(v => { if (v.kind === 'scholar') G.scholars = G.scholars.filter(x => x !== v); else G.ops = G.ops.filter(x => x !== v); });
+      return gone.length ? `${gone.map(v => v.name).join(' and ')} quit by Friday.` : 'Somehow, nobody was left to quit.'; },
+  ],
+  shutdown: [
+    () => { G.freeze = 1; return 'The Hill goes dark for a month.'; },
+    () => { G.freeze = 1; G.influence += 20; return 'The Hill goes dark; your panels mint ✦20.'; },
+  ],
+  recess: [
+    () => { G.fights.forEach(f => f.monthsLeft = Math.min(f.monthsLeft, 1)); return 'Everything resolves at the next END MONTH.'; },
+    () => { G.fights.forEach(f => f.monthsLeft = Math.min(f.monthsLeft, 1)); G.influence += 15; return 'Everything resolves next month; the scramble mints ✦15.'; },
+  ],
+  galafire: [
+    () => 'The lawyers bill hourly and win.',
+    () => { G.programs.gala = false; return 'The gala is quietly cancelled. Its patrons will notice.'; },
+  ],
+  hack: [
+    () => 'The database returns, along with a lesson nobody will implement.',
+    c => { G.ops = G.ops.filter(o => o.id !== c.t.ops); G.influence = Math.max(0, G.influence - 15); return `${c.n.OPS} quits in the chaos; the scramble costs ✦15.`; },
+  ],
+  plagiarism: [
+    c => { const s = G.scholars.find(x => x.id === c.t.top); if (s) s.out = Math.max(5, s.out - 5); return `${c.n.TOP}'s output drops 5, permanently.`; },
+    () => 'The denial holds. The file closes.',
+    c => { G.scholars = G.scholars.filter(x => x.id !== c.t.top); return `${c.n.TOP} departs for “new projects.”`; },
+  ],
+  revolt: [
+    () => { const staff = [...G.scholars, ...G.ops].sort((x, y) => y.salary - x.salary)[0];
+      if (staff) { if (staff.kind === 'scholar') G.scholars = G.scholars.filter(x => x !== staff); else G.ops = G.ops.filter(x => x !== staff); }
+      G.cash += 60;
+      return staff ? `${staff.name} is sacrificed to the slides; the board wires ${fmtMoney(60)}.` : `The board wires ${fmtMoney(60)}.`; },
+    () => { G.cash += 100; return `The groveling lands: a ${fmtMoney(100)} bridge gift.`; },
+  ],
+  smear: [
+    () => { G.fights.forEach(f => f.sides.forEach(s => { const cut = Math.ceil(s.yours * 0.2); s.yours -= cut; s.total -= cut; })); return 'Your standing commitments erode 20% across the board.'; },
+    c => { const r = G.rivals.find(x => x.short === c.t.rival); if (r) r.budget = Math.max(TUNE.raidMinBudget, r.budget - 3); return `Counter-oppo lands: ${c.n.RIVAL}'s budget takes a permanent −3.`; },
+  ],
+  center: [
+    c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) { d.grant += 30; d.term = (d.term || 18) + 6; } return `The ${c.n.DONOR} Center opens. The plaque is enormous; the grant grows ${fmtMoney(30)}/mo.`; },
+    c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) d.strikes++; return `${c.n.DONOR} takes offense.`; },
+  ],
+  union: [
+    () => { G.ops.forEach(o => o.salary += 1); return 'The union is recognized. Every ops salary rises $1k/mo.'; },
+    c => { const o = pick(G.ops); if (o) G.ops = G.ops.filter(x => x !== o); G.influence = Math.max(0, G.influence - 30); return `${o ? o.name : 'An ops staffer'} quits during the standoff.`; },
+  ],
+};
+
+function actCrisis(idx) {
+  const c = G.crisis;
+  if (!c) return;
+  const def = CRISES.find(x => x.id === c.id);
+  const ch = def.choices[idx];
+  if (!ch) return;
+  if ((ch.cash || 0) > G.cash || (ch.inf || 0) > G.influence) return flash('You can\'t afford that option right now.');
+  G.cash -= ch.cash || 0;
+  G.influence -= ch.inf || 0;
+  const note = CRISIS_FX[c.id][idx](c);
+  logLine(`CRISIS RESOLVED — ${crisisSub(def.title)}: “${crisisSub(ch.label)}.” ${note}`);
+  G.crisis = null;
+  save(); render();
+}
+
+function renderCrisis() {
+  const win = $('#crisisWin');
+  if (!G || !G.crisis) { win.classList.add('hidden'); return; }
+  const def = CRISES.find(x => x.id === G.crisis.id);
+  $('#crisisTitle').textContent = crisisSub(def.title);
+  $('#crisisBody').innerHTML = `
+    <div class="crisisbody">${crisisSub(def.body)}</div>
+    ${def.choices.map((ch, i) => {
+      const cost = [ch.cash ? fmtMoney(ch.cash) : '', ch.inf ? `✦${ch.inf}` : ''].filter(Boolean).join(' + ');
+      const short = (ch.cash || 0) > G.cash || (ch.inf || 0) > G.influence;
+      return `<div class="crisischoice">
+        <button class="btn" data-act="crisischoice" data-idx="${i}" ${short ? 'disabled' : ''}>${crisisSub(ch.label)}${cost ? ` (${cost})` : ''}</button>
+        <span class="dim">${crisisSub(ch.hint)}</span>
+      </div>`;
+    }).join('')}`;
+  win.classList.remove('hidden');
+}
+
 // ---------- rival AI ----------
 function rivalCommits() {
   G.rivals.forEach(r => {
     const targets = [];
     G.fights.forEach(f => {
       let sideIdx = -1;
+      const pet = f.tag && r.tags.includes(f.tag);
       const pref = f.sides.findIndex(s => s.lean * r.align > 0);
       if (pref >= 0) sideIdx = pref;
-      else if (f.tag && r.tags.includes(f.tag)) {
+      else if (pet) {
         if (f.rivalPicks[r.short] === undefined) f.rivalPicks[r.short] = ri(0, 1);
         sideIdx = f.rivalPicks[r.short];
+      }
+      // focused shops sit out fights that aren't their issue (decided once)
+      if (sideIdx >= 0 && !pet) {
+        f.rivalSkips = f.rivalSkips || {};
+        if (f.rivalSkips[r.short] === undefined) f.rivalSkips[r.short] = Math.random() < TUNE.rivalFocus ? 1 : 0;
+        if (f.rivalSkips[r.short]) sideIdx = -1;
       }
       if (sideIdx >= 0) {
         // everyone piles in as the vote nears — last-month sniping meets a wall
@@ -541,7 +721,8 @@ function rivalCommits() {
       }
     });
     if (!targets.length) return;
-    const budget = Math.round(r.budget * (0.75 + Math.random() * 0.5));
+    const seasonal = G.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
+    const budget = Math.round(r.budget * seasonal * (0.75 + Math.random() * 0.5));
     const wSum = targets.reduce((a, t) => a + t.w, 0);
     targets.forEach(t => {
       const amt = Math.floor(budget * t.w / wSum);
@@ -558,16 +739,23 @@ function rivalCommits() {
 // ---------- month end ----------
 function endMonth() {
   if (G.over) return;
+  if (G.crisis) { flash('The Bugle EXTRA is waiting — resolve the crisis first.'); renderCrisis(); return; }
   const news = [];
   G.stats.months++;
 
   // 1. rivals pile on
   rivalCommits();
 
-  // 2. clocks tick; fights resolve
-  G.fights.forEach(f => f.monthsLeft--);
-  G.fights.filter(f => f.monthsLeft <= 0).forEach(f => resolveFight(f, news));
-  G.fights = G.fights.filter(f => f.monthsLeft > 0);
+  // 2. clocks tick; fights resolve (unless a shutdown froze the Hill)
+  if (G.freeze > 0) {
+    G.freeze--;
+    news.push({ h: 'THE HILL IS DARK', s: 'Shutdown month: no clocks tick, nothing resolves. Everyone keeps piling money on regardless.' });
+    logLine('Shutdown: fight clocks frozen this month.');
+  } else {
+    G.fights.forEach(f => f.monthsLeft--);
+    G.fights.filter(f => f.monthsLeft <= 0).forEach(f => resolveFight(f, news));
+    G.fights = G.fights.filter(f => f.monthsLeft > 0);
+  }
 
   // 3. scholars produce influence
   const prod = production();
@@ -701,6 +889,9 @@ function endMonth() {
   while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
   while (G.fights.length < TUNE.fightSlots) drawFight();
 
+  // 8.5 a crisis may land (never two at once)
+  if (!G.crisis && Math.random() < TUNE.crisisChance) drawCrisis(news);
+
   // 9. slow news day? the three branches never disappoint
   if (Math.random() < TUNE.flavorChance) {
     shuffle(FLAVOR_NEWS).slice(0, Math.random() < 0.4 ? 2 : 1)
@@ -711,16 +902,28 @@ function endMonth() {
   G.month++;
   G.stats.peakCash = Math.max(G.stats.peakCash, G.cash);
   if (G.month >= TUNE.electionMonth) { electionDay(news); return; }
+  if (G.month === TUNE.electionSeasonStart) {
+    news.unshift({ h: 'ELECTION SEASON BEGINS — SIX MONTHS TO THE VOTE', s: `Every institution in town opens its war chest: rival influence spending runs ${Math.round((TUNE.electionSeasonMult - 1) * 100)}% hotter from here to Election Night. Fights get louder, credit gets pricier, and the leaderboard is watching. Plan accordingly.`, big: true });
+    logLine('ELECTION SEASON: rival spending +50% until the vote.');
+  }
   save(); render();
   if (news.length) showPaper(news);
 }
 
 function resolveFight(f, news) {
   const [a, b] = f.sides;
-  const winner = a.total === b.total ? pick([a, b]) : (a.total > b.total ? a : b);
+  const pA = Math.round(winProbA(f) * 100);
+  const roll = ri(1, 100);
+  const winner = roll <= pA ? a : b;
   const loser = winner === a ? b : a;
-  const tie = a.total === b.total;
-  let sub = `“${winner.label}” prevails ${winner.total}–${loser.total}${tie ? ' after a coin flip nobody will discuss' : ''}.`;
+  const winProb = winner === a ? pA : 100 - pA;
+  const upset = winProb < 35;
+  const meter = {
+    pA, roll,
+    aLabel: a.label.split(':')[0], bLabel: b.label.split(':')[0],
+    winLabel: winner.label.split(':')[0],
+  };
+  let sub = `“${winner.label}” prevails ${winner.total}–${loser.total} — a ${winProb}% shot${upset ? ', and the town is stunned' : ''}.`;
 
   // the victory is banked by whoever carried the winning side hardest
   let topRival = null, topAmt = 0;
@@ -761,15 +964,15 @@ function resolveFight(f, news) {
       gains.push('a grateful town forgets old grudges (all donor strikes −1)');
     }
     sub += ` ${creditLine} The spoils: ${gains.join('; ')}.`;
-    news.push({ h: playerBanks ? `${f.title.toUpperCase()} — VICTORY FOR ${tank().short.toUpperCase()}` : `${f.title.toUpperCase()} — RESOLVED`, s: sub, big: playerBanks });
+    news.push({ h: `${upset ? 'UPSET: ' : ''}${f.title.toUpperCase()}${playerBanks ? ` — VICTORY FOR ${tank().short.toUpperCase()}` : ' — RESOLVED'}`, s: sub, big: playerBanks, meter });
     logLine(`${playerBanks ? 'VICTORY BANKED' : 'Backed the winner'}: ${f.title} → ${gains.join('; ')} (${Math.round(share * 100)}% of the winning side).`);
   } else if (loser.yours > 0) {
     G.stats.lost++;
     sub += ` ${creditLine} ${tank().short} spent ${loser.yours} influence on the losing side. A fellow calls it “directionally correct.”`;
-    news.push({ h: `${f.title.toUpperCase()} — RESOLVED`, s: sub });
+    news.push({ h: `${upset ? 'UPSET: ' : ''}${f.title.toUpperCase()} — RESOLVED`, s: sub, meter });
     logLine(`LOSS: ${f.title}. ${loser.yours} influence down the drain.`);
   } else {
-    news.push({ h: `${f.title.toUpperCase()} — RESOLVED`, s: `${sub} ${creditLine} You watched from the sidelines.` });
+    news.push({ h: `${upset ? 'UPSET: ' : ''}${f.title.toUpperCase()} — RESOLVED`, s: `${sub} ${creditLine} You watched from the sidelines.`, meter });
     logLine(`${f.title} resolved without you. ${creditLine}`);
   }
 }
@@ -819,16 +1022,29 @@ function logLine(text) {
   if (G.log.length > 80) G.log.pop();
 }
 
+function meterHTML(m) {
+  if (!m) return '';
+  return `
+    <div class="rollmeter">
+      <div class="rollbar"><div class="rollA" style="width:${m.pA}%"></div><div class="needle" data-roll="${m.roll}"></div></div>
+      <div class="rolltext">${m.aLabel} wins on 1–${m.pA}, ${m.bLabel} on ${Math.min(100, m.pA + 1)}–100 · the wire reads <b>${m.roll}</b> → <b>${m.winLabel}</b></div>
+    </div>`;
+}
+
 function showPaper(items, isGameOver) {
   const lead = items.find(i => i.big) || items[0];
   const rest = items.filter(i => i !== lead);
   $('#paperDate').textContent = `${dateStr(G.month)} — Vol. ${G.month + 1} — Still 75¢`;
-  $('#paperLead').innerHTML = `<div class="headline">${lead.h}</div>${lead.s ? `<div class="subhead">${lead.s}</div>` : ''}`;
+  $('#paperLead').innerHTML = `<div class="headline">${lead.h}</div>${lead.s ? `<div class="subhead">${lead.s}</div>` : ''}${meterHTML(lead.meter)}`;
   $('#paperRest').innerHTML = rest.map(i =>
-    `<div class="paper-item"><div class="headline-sm">${i.h}</div>${i.s ? `<div class="subhead-sm">${i.s}</div>` : ''}</div>`).join('');
+    `<div class="paper-item"><div class="headline-sm">${i.h}</div>${i.s ? `<div class="subhead-sm">${i.s}</div>` : ''}${meterHTML(i.meter)}</div>`).join('');
   $('#paperBtn').textContent = isGameOver ? 'Start Over' : 'Continue';
   $('#paperBtn').dataset.act = isGameOver ? 'restart' : 'closepaper';
   $('#paper').classList.remove('hidden');
+  // sweep each needle to its rolled number after the paper lands
+  setTimeout(() => {
+    document.querySelectorAll('#paper .needle').forEach(n => { n.style.left = n.dataset.roll + '%'; });
+  }, 80);
 }
 
 // ---------- save / load ----------
@@ -889,7 +1105,11 @@ function render() {
 
   $('#tbTank').textContent = t.short.toUpperCase();
   const monthsLeft = TUNE.electionMonth - G.month;
-  $('#tbDate').textContent = monthsLeft > 0 ? `${dateStr(G.month)} · ${monthsLeft} mo to election` : 'ELECTION NIGHT';
+  const inSeason = G.month >= TUNE.electionSeasonStart && monthsLeft > 0;
+  $('#tbDate').textContent = monthsLeft <= 0 ? 'ELECTION NIGHT'
+    : inSeason ? `${dateStr(G.month)} · ⚡ ELECTION SEASON · ${monthsLeft} mo`
+    : `${dateStr(G.month)} · ${monthsLeft} mo to election`;
+  $('#tbDate').className = inSeason ? 'tbval season' : 'tbval';
   $('#tbCash').innerHTML = `${fmtMoney(G.cash)} <span class="dim">(${fmtSigned(net)}/mo)</span>`;
   $('#tbCash').className = G.cash < 0 ? 'tbval bad' : 'tbval';
   $('#tbInf').innerHTML = `✦ ${G.influence} <span class="dim">(+${production()}/mo)</span>`;
@@ -908,6 +1128,7 @@ function render() {
   renderMyDonors();
   renderReport();
   renderBugle();
+  renderCrisis();
 }
 
 function renderStaff(cap) {
@@ -1016,7 +1237,7 @@ function expertiseChip(tag) {
   const n = G.scholars.filter(s => s.tag === tag).length;
   if (!n) return '';
   const pct = Math.round((expertiseMult(tag) - 1) * 100);
-  const wr = G.programs.warroom ? ' The War Room adds 10 points of that.' : '';
+  const wr = G.programs.warroom ? ` The War Room adds ${Math.round(TUNE.warroomBonus * 100)} points of that.` : '';
   return ` <span class="chip on" title="Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).${wr}">★ +${pct}%</span>`;
 }
 
@@ -1034,18 +1255,18 @@ function backersText(s) {
 function renderFights() {
   $('#fightsBody').innerHTML = G.fights.map((f, fi) => {
     const [a, b] = f.sides;
-    const total = a.total + b.total;
-    const pctA = total === 0 ? 50 : Math.max(4, Math.min(96, Math.round(a.total / total * 100)));
+    const pWin = Math.round(winProbA(f) * 100);
+    const pctA = Math.max(2, Math.min(98, pWin));
     return `
       <div class="card fightcard">
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
           <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
-          <div class="tug"><div class="tugA" style="width:${pctA}%"></div></div>
+          <div class="tug" title="Odds if it resolved right now. Influence ratios are sharpened (a 2:1 lead wins ~85%) — but the wire decides, and upsets happen."><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
               <span class="sidelabel"><span class="sidemark ${si === 0 ? 'a' : 'b'}" title="This side's segment of the bar is ${si === 0 ? 'gold' : 'violet'}">${si === 0 ? '◤' : '◢'}</span> ${s.label} ${leanChip(s.lean)}</span>
-              <span class="sidenums">${s.total}</span>
+              <span class="sidenums">${s.total} <span class="dim prob">· ${si === 0 ? pWin : 100 - pWin}%</span></span>
               <span class="sidebtns">
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="5">+5</button>
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="25">+25</button>
@@ -1062,9 +1283,9 @@ function renderReport() {
   const s = G.stats;
   const grants = monthlyGrants(), payroll = payrollCost(), rent = effectiveRent(), prog = programsCost();
   const net = grants - payroll - rent - prog;
-  const cap = supportCap();
+  const seasonal = G.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
   const lbRows = standings().map((row, i) => {
-    const budget = row.you ? `+${production()}` : `~${G.rivals.find(r => r.short === row.short).budget}`;
+    const budget = row.you ? `+${production()}` : `~${Math.round(G.rivals.find(r => r.short === row.short).budget * seasonal)}`;
     return `<tr class="${row.you ? 'you' : ''}">
       <td class="rank">${i + 1}</td>
       <td>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}${row.you ? ' ★' : ''}</td>
@@ -1087,9 +1308,6 @@ function renderReport() {
       <tr><td>Programs</td><td class="amt">${fmtSigned(-prog)}</td></tr>
       <tr class="net"><td>Net</td><td class="amt ${net < 0 ? 'warn' : 'ok'}">${fmtSigned(net)}</td></tr>
     </table>
-    <div class="subdivider">INFLUENCE</div>
-    <div class="pline">Banked ✦ ${G.influence} · producing +${production()}/mo</div>
-    <div class="pline dim">${Math.min(G.scholars.length, cap)}/${G.scholars.length} scholars supported</div>
     <div class="subdivider">LEADERBOARD — POLICY VICTORIES</div>
     <table class="ledger lb">
       <tr class="lbhead"><td>#</td><td>TANK</td><td>LEAN</td><td class="amt">W</td><td class="amt">✦/mo</td></tr>
@@ -1172,6 +1390,7 @@ document.addEventListener('click', e => {
   else if (act === 'drop') actDrop(b.dataset.id);
   else if (act === 'prog') actProgram(b.dataset.id);
   else if (act === 'prospect') actProspect(b.dataset.kind);
+  else if (act === 'crisischoice') actCrisis(+b.dataset.idx);
   else if (act === 'renew') actRenew(b.dataset.id);
   else if (act === 'lapse') actLapse(b.dataset.id);
   else if (act === 'match') actMatch(+b.dataset.id);

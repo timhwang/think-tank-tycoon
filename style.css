@@ -430,6 +430,45 @@ body {
   pointer-events: none;
 }
 
+/* ---------- resolution roll meter (in the Bugle) ---------- */
+.rollmeter { margin: 6px 0 4px 0; }
+.rollbar {
+  position: relative;
+  height: 14px;
+  background: #7d5fa8;
+  border: 2px solid #1c160c;
+}
+.rollA { height: 100%; background: #d99a1f; border-right: 2px solid #1c160c; }
+.needle {
+  position: absolute;
+  top: -4px; bottom: -4px;
+  left: 0%;
+  width: 4px;
+  margin-left: -2px;
+  background: #1c160c;
+  transition: left 1.4s cubic-bezier(.2, .85, .25, 1.15);
+}
+.rolltext { font-size: 10px; font-style: italic; margin-top: 3px; }
+
+/* ---------- crisis window ---------- */
+#crisisWin {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, 94vw);
+  z-index: 95;
+  box-shadow: 8px 8px 0 #00000088;
+}
+.titlebar.crisisbar { background: linear-gradient(90deg, #7a0000, #b03030); }
+.crisisbody { font-size: 12px; margin-bottom: 8px; line-height: 1.5; }
+.crisischoice { margin: 6px 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.crisischoice .btn { flex: none; }
+
+/* ---------- election season ---------- */
+.tbval.season { color: #a00000; }
+.prob { font-weight: normal; }
+
 /* ---------- programs popup ---------- */
 #progWin {
   position: fixed;

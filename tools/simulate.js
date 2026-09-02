@@ -36,6 +36,7 @@ const sandbox = {
   alert() {},
   confirm() { return true; },
   console,
+  setTimeout: () => {}, clearTimeout: () => {},
   Math, JSON, Object, Array, Number, String, Boolean, Set, Map, Date, RegExp, parseInt, parseFloat, isNaN,
 };
 sandbox.globalThis = sandbox;
@@ -178,33 +179,57 @@ function botShrewd() {
     actCommit(fi, si, Math.ceil(need / expertiseMult(f.tag)));
   });
   // hunt victories: find the cheapest fight where we can lead the winning side
+  // with real odds (resolution is probabilistic — bid to ~80%, not to parity)
   const reserve = G.month < 4 ? 60 : 15; // build the machine first, then spend
+  const seasonMult = G.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
+  // the closing surge punishes pure sniping, so build positions across the
+  // final three months, topping up toward target odds each turn
   const plans = [];
   G.fights.forEach((f, fi) => {
-    if (f.monthsLeft > 2) return; // commit late; early money invites counter-piling
+    if (f.monthsLeft > 3) return;
     f.sides.forEach((s, si) => {
       const opp = f.sides[1 - si];
       const topOther = Math.max(0, ...Object.values(s.rivals || {}));
-      // rivals surge into closing fights, so late bids need real margin
-      const buffer = f.monthsLeft <= 1 ? 32 : 24;
-      const eff = Math.max(topOther + buffer - s.yours, opp.total + buffer - s.total, 0);
+      const buffer = Math.round((f.monthsLeft <= 1 ? 30 : f.monthsLeft === 2 ? 22 : 16) * seasonMult);
+      const oddsRatio = 1.7;
+      const eff = Math.max(topOther + Math.ceil(buffer / 2) - s.yours,
+                           Math.ceil(oddsRatio * (opp.total + buffer)) - s.total, 0);
       const raw = Math.ceil(eff / expertiseMult(f.tag)) || 1;
-      plans.push({ fi, si, raw });
+      // prefer sides we already back (sunk position) and closer resolutions
+      plans.push({ fi, si, raw: s.yours > 0 ? Math.ceil(raw * 0.8) : raw, actual: raw });
     });
   });
   plans.sort((a, b) => a.raw - b.raw);
   let bids = 0;
   for (const p of plans) {
-    if (bids >= 3 || p.raw > G.influence - reserve) break;
-    actCommit(p.fi, p.si, p.raw);
+    if (bids >= 3 || p.actual > G.influence - reserve) break;
+    actCommit(p.fi, p.si, p.actual);
     bids++;
   }
+}
+
+function resolveCrisisBot(strategy) {
+  const def = CRISES.find(x => x.id === G.crisis.id);
+  const affordable = def.choices.map((ch, i) => ({ ch, i }))
+    .filter(x => (x.ch.cash || 0) <= G.cash && (x.ch.inf || 0) <= G.influence);
+  const free = affordable.filter(x => !(x.ch.cash || x.ch.inf));
+  let choice;
+  if (strategy === 'shrewd') {
+    // pay to protect the machine when flush; otherwise take the free hit
+    const paid = affordable.filter(x => (x.ch.cash || x.ch.inf))
+      .filter(x => (!x.ch.cash || G.cash > 400) && (!x.ch.inf || G.influence > 70));
+    choice = paid[paid.length - 1] || free[0] || affordable[0];
+  } else {
+    choice = free[0] || affordable[0];
+  }
+  if (choice) actCrisis(choice.i);
 }
 
 globalThis.__runOne = function (tankId, strategy, maxMonths) {
   newGame(tankId);
   let guard = 0;
   while (!G.over && guard++ < (maxMonths || 40)) {
+    if (G.crisis) resolveCrisisBot(strategy);
     if (strategy === 'naive') botNaive();
     else if (strategy === 'decent') botDecent();
     else if (strategy === 'shrewd') botShrewd();
