@@ -62,6 +62,8 @@ const TUNE = {
   opsChaoticChance: 0.10,// odds an ops hire is CHAOTIC (big capacity, unreliable)
   opsDudChance: 0.10,    // odds an ops hire is a hidden bad deal (1-cap, senior price)
   chaosFlakeChance: 0.2, // monthly odds a CHAOTIC ops delivers zero support
+  specialistChance: 0.45,// odds an ops market draw is a specialist (no scholar support)
+  consultantChance: 0.18,// odds a specialist is, in fact, a consultant
   moraleMult: 0.75,      // demoralized scholars produce at this rate
   moraleMonths: 2,       // ...for this many months after a contested loss in their field
   moraleQuitChance: 0.25,// odds a demoralized scholar quits when their field loses AGAIN
@@ -152,6 +154,11 @@ const NPC_TANKS = [
 //                    theirs (in that tag's fights, or any fight if tag null)
 //   ENGAGE  {tag,amt} — commit >= amt influence to that tag's fights each
 //                    month (forgiven when no such fight is on the board)
+// Optional donor fields:
+//   perk:'PID'   — a called-out benefit while they fund you (see DONOR_PERKS)
+//   flaw:'PID'   — a called-out drawback while they fund you
+//   require:fn?  — only appears in market if your current donor base qualifies
+//                  (requireText describes the gate)
 // ------------------------------------------------------------
 const DONORS = [
   { id:'pemberton', name:'The Pemberton Family Trust', grant:120, cost:50, lean:1,
@@ -232,7 +239,54 @@ const DONORS = [
   { id:'gilt', name:'The Gilt Trip Foundation', grant:210, cost:80, lean:1,
     demand:{type:'PROGRAM', pid:'gala'},
     blurb:'Old money, new guilt.' },
+  // --- buffed / flawed donors (called out on the card) ---
+  { id:'anchor', name:'The Anchor Trust', grant:150, cost:70, lean:0, perk:'anchor',
+    demand:{type:'ROSTER', tag:'TAX'},
+    blurb:'Patient capital, and proud of it.' },
+  { id:'megaphone', name:'The Megaphone Fund', grant:230, cost:85, lean:1, perk:'megaphone',
+    demand:{type:'ROSTER', tag:'TECH'},
+    blurb:'Believes loudly in believing loudly.' },
+  { id:'matching', name:'The Match Point Foundation', grant:120, cost:55, lean:-1, perk:'matching',
+    demand:{type:'ROSTER', tag:'HLTH'},
+    blurb:'Will match, conditionally, eventually.' },
+  { id:'meddler', name:'The Overbrook Meddler Fund', grant:240, cost:80, lean:1, flaw:'meddler',
+    demand:{type:'NOCROSS', tag:null},
+    blurb:'Has read your org chart and has notes.' },
+  { id:'fickle', name:'The Weathervane Group', grant:200, cost:60, lean:0, flaw:'fickle',
+    demand:{type:'PROGRAM', pid:'podcast'},
+    blurb:'Whatever polled well this morning.' },
+  { id:'jealous', name:'The Sole Patron Society', grant:260, cost:95, lean:-1, flaw:'jealous',
+    demand:{type:'ROSTER', tag:'CLIM'},
+    blurb:'Would prefer to be your only friend.' },
+  // --- prerequisite donors (need the right base first) ---
+  { id:'consortium', name:'The Blue-Chip Consortium', grant:340, cost:130, lean:1,
+    demand:{type:'ROSTER', tag:'DEF'},
+    require:g => g.donors.filter(x => !x.lapsing).length >= 4, requireText:'Only courts institutions with 4+ active donors',
+    blurb:'Does not do introductory rounds.' },
+  { id:'legacygift', name:'The Ambrose Legacy Bequest', grant:300, cost:110, lean:0,
+    demand:{type:'PROGRAM', pid:'lobby'},
+    require:g => g.donors.some(x => x.renewals) , requireText:'Only courts institutions that have renewed a donor',
+    blurb:'Invests in longevity, having little left.' },
+  { id:'purity', name:'The Undiluted Fund', grant:280, cost:100, lean:2,
+    demand:{type:'NOCROSS', tag:null},
+    require:g => g.donors.filter(x => !x.lapsing).length > 0 && g.donors.filter(x => !x.lapsing).every(x => (x.lean || 0) >= 0), requireText:'Only courts institutions with no left-leaning donors',
+    blurb:'No notes. No nuance. No compromise.' },
 ];
+
+// Called-out donor perks and flaws (tooltip text; effects live in game.js)
+const DONOR_PERKS = {
+  anchor:    { label:'ANCHOR',    tip:'Rock-steady: this grant never enters a renewal cycle — it funds you to the election.' },
+  megaphone: { label:'MEGAPHONE', tip:'Amplifies your voice: +8% on all influence you commit to fights while they fund you.' },
+  matching:  { label:'MATCHING',  tip:'Matches the room: +$4k/mo for every OTHER active donor you keep.' },
+};
+const DONOR_FLAWS = {
+  meddler:   { label:'MEDDLER',   tip:'High-maintenance: −8% to all your scholars\' output while they fund you.' },
+  fickle:    { label:'FICKLE',    tip:'Flighty: each month a 15% chance they cut their own grant by a third, permanently.' },
+  jealous:   { label:'JEALOUS',   tip:'Possessive: takes a strike whenever you court a NEW donor while they fund you.' },
+};
+
+// --- (old marker) ---
+const _DONORS_END = true;
 
 // ------------------------------------------------------------
 // Programs: money sinks that satisfy donor demands. Bloat with a purpose.
@@ -400,6 +454,26 @@ const DUD_QUIRKS = [
   'Charges keynote rates for staff meetings.',
   'Best known for being frequently introduced.',
   'Their last big idea was an acronym.',
+];
+
+// ------------------------------------------------------------
+// Specialist ops: zero scholar support, one clear function each.
+// The consultant is the specialist market's bad apple: a senior title,
+// a senior salary, and no measurable effect whatsoever.
+// ------------------------------------------------------------
+const SPECIALISTS = [
+  { id:'comms', role:'Comms Director', sal:[10,14], fx:'+3 ✦/mo',
+    tip:'Books the hits, feeds the clips: +3 ✦/mo to production.', icon:'spec_comms' },
+  { id:'devdir', role:'Development Director', sal:[10,14], fx:'courting −15%',
+    tip:'Runs the pipeline: donor courting costs −15% while employed.', icon:'spec_devdir' },
+  { id:'editor', role:'Editor-in-Chief', sal:[11,15], fx:'+1 ✦/scholar',
+    tip:'Makes everyone sharper: +1 ✦/mo per scholar on staff (up to 8).', icon:'spec_editor' },
+  { id:'creative', role:'Creative Director', sal:[9,13], fx:'programs −30%',
+    tip:'Produces it all in-house: program monthly costs −30% while employed.', icon:'spec_creative' },
+  { id:'govrel', role:'Gov Relations Lead', sal:[10,14], fx:'commits +5%',
+    tip:'Knows which door: +5% on all influence you commit to fights.', icon:'spec_govrel' },
+  { id:'consultant', role:'Senior Strategy Consultant', sal:[13,18], fx:'synergy',
+    tip:'Effect: none that anyone has measured.', icon:'spec_consultant', dud:true },
 ];
 
 // résumé lines for ops bad apples — again, the numbers are the tell

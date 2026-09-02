@@ -114,6 +114,14 @@ ICONS = {
     'program_chair':   'an ornate leather professor armchair on a marble pedestal with a brass plaque',
     'program_wing':    'a marble building annex under construction with wooden scaffolding',
 
+    # ---- specialist ops (6) ----
+    'spec_comms':      'a bank of press-conference microphones on a wooden podium',
+    'spec_devdir':     'a rotary telephone wrapped in a gift ribbon with a donation envelope',
+    'spec_editor':     'a green-visored editor\'s desk with a manuscript covered in red ink',
+    'spec_creative':   'a drafting table with color swatches and a t-square',
+    'spec_govrel':     'a revolving brass door between two marble columns',
+    'spec_consultant': 'a gleaming empty whiteboard on wheels, spotless',
+
     # ---- think tanks (7) ----
     'tank_hutchings':    'a marble neoclassical institute building with columns and ivy trim on a blue shield',
     'tank_legacy':       'a bald eagle perched on a stack of leather books on a red shield',

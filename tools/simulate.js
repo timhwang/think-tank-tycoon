@@ -140,10 +140,19 @@ function botShrewd() {
   });
   // support discipline first (capacity per salary, skip lavish offices)
   while (G.scholars.length > supportCap() && G.cash > 250) {
-    const ops = affordableHires().filter(x => x.h.kind === 'ops' && (!x.h.trait || (x.h.trait.id !== 'expense' && x.h.trait.id !== 'chaotic')))
+    const ops = affordableHires().filter(x => x.h.kind === 'ops' && x.h.supports > 0 && (!x.h.trait || (x.h.trait.id !== 'expense' && x.h.trait.id !== 'chaotic')))
       .sort((a, b) => (b.h.supports / b.h.salary) - (a.h.supports / a.h.salary));
     if (!ops.length) break;
     actHire(ops[0].i);
+  }
+  // a real specialist desk when the machine can carry one
+  if (monthlyGrants() - monthlyCosts() > 40 && G.cash > 500) {
+    const want = G.scholars.length >= 4 && !G.ops.some(o => o.spec === 'editor') ? 'editor'
+               : !G.ops.some(o => o.spec === 'comms') ? 'comms' : null;
+    if (want) {
+      const cand = affordableHires().find(x => x.h.spec === want);
+      if (cand) actHire(cand.i);
+    }
   }
   // run programs current funders demand; drop dead weight
   PROGRAMS.forEach(p => {
@@ -157,9 +166,16 @@ function botShrewd() {
   if (!G.programs.warroom && net0 > 40 && G.month >= 4) actProgram('warroom');
   if (!G.programs.chair && G.cash > 1200) actProgram('chair');
   // court aggressively — breadth pays; just keep a small war chest
+  const donorScore = d => {
+    let v = d.grant / courtCost(d);
+    if (d.perk) v *= 1.25;
+    if (d.flaw === 'meddler' || d.flaw === 'jealous') v *= 0.6;
+    if (d.flaw === 'fickle') v *= 0.8;
+    return v;
+  };
   const courtable = G.donorMarket.map((d, i) => ({ d, i }))
     .filter(x => courtCost(x.d) <= G.influence - 25)
-    .sort((a, b) => (b.d.grant / courtCost(b.d)) - (a.d.grant / courtCost(a.d)));
+    .sort((a, b) => donorScore(b.d) - donorScore(a.d));
   if (courtable.length) actCourt(courtable[0].i);
   // grow the bench when finances allow (divas are someone else's problem)
   const net = monthlyGrants() - monthlyCosts();
