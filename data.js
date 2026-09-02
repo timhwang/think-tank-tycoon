@@ -55,7 +55,13 @@ const TUNE = {
   dudChance: 0.18,       // odds a market scholar is an insanely bad deal (read the stats)
   divaQuitChance: 0.12,  // monthly odds each diva drives a colleague out
   opsBoonChance: 0.28,   // odds an ops hire carries a bonus trait
-  opsFlawChance: 0.15,   // odds an ops hire carries a deficit instead
+  opsFlawChance: 0.12,   // odds an ops hire is EXPENSIVE instead
+  opsChaoticChance: 0.10,// odds an ops hire is CHAOTIC (big capacity, unreliable)
+  opsDudChance: 0.10,    // odds an ops hire is a hidden bad deal (1-cap, senior price)
+  chaosFlakeChance: 0.2, // monthly odds a CHAOTIC ops delivers zero support
+  moraleMult: 0.75,      // demoralized scholars produce at this rate
+  moraleMonths: 2,       // ...for this many months after a contested loss in their field
+  moraleQuitChance: 0.25,// odds a demoralized scholar quits when their field loses AGAIN
   poachChance: 0.12,     // monthly odds a rival makes a run at one of your scholars
   poachRivalGain: 3,     // rival budget gained when your scholar defects to them
   renewCostMult: 0.5,    // renewing an expiring donor costs this x fresh courting
@@ -389,6 +395,16 @@ const DUD_QUIRKS = [
   'Charges keynote rates for staff meetings.',
   'Best known for being frequently introduced.',
   'Their last big idea was an acronym.',
+];
+
+// résumé lines for ops bad apples — again, the numbers are the tell
+const OPS_DUD_QUIRKS = [
+  'Managed the office move. In 2019. Still referencing it.',
+  'Calendar is “a living document.” Nothing is ever on it.',
+  'Forwards every email with “thoughts?”',
+  'Owns the org chart. Refuses to share the org chart.',
+  'In meetings about meetings; unreachable otherwise.',
+  'Has a system. The system is asking you.',
 ];
 
 const OPS_QUIRKS = [

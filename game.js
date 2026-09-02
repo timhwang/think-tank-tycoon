@@ -87,25 +87,31 @@ const OPS_TRAITS = [
   { id:'grants',  label:'RAINMAKER',    tip:'Works the phones: +$6k/mo in extra grants while employed.' },
   { id:'court',   label:'CONNECTOR',    tip:'Knows everyone: donor courting costs −10% while employed.' },
   { id:'expense', label:'EXPENSIVE',    tip:'Runs a lavish office: +$6k/mo in miscellaneous costs.' },
+  { id:'chaotic', label:'CHAOTIC',      tip:'Supports 3 on paper — but each month there\'s a 20% chance they deliver nothing at all.' },
 ];
 
 function genOps(starter) {
   const rIdx = Math.floor(Math.random() * OPS_ROLES.length);
   const r = Math.random();
   // starters are dependable generalists so every opening roster is supported
-  const supports = starter ? TUNE.supportRatio : (r < 0.2 ? 1 : r < 0.75 ? 2 : 3);
+  let supports = starter ? TUNE.supportRatio : (r < 0.2 ? 1 : r < 0.75 ? 2 : 3);
   let salary = 3 + supports * 4 + ri(0, 3);
   let trait = null;
+  let quirk = pick(OPS_QUIRKS);
   const t = Math.random();
   if (!starter) {
-    if (t < TUNE.opsBoonChance) { trait = pick(OPS_TRAITS.slice(0, 3)); salary += 2; }
-    else if (t < TUNE.opsBoonChance + TUNE.opsFlawChance) { trait = OPS_TRAITS[3]; salary = Math.max(5, salary - 2); }
-    else if (Math.random() < 0.12) salary += ri(4, 8); // plain overpriced, no upside
+    const b = TUNE.opsBoonChance, f = b + TUNE.opsFlawChance,
+          ch = f + TUNE.opsChaoticChance, du = ch + TUNE.opsDudChance;
+    if (t < b) { trait = pick(OPS_TRAITS.slice(0, 3)); salary += 2; }
+    else if (t < f) { trait = OPS_TRAITS[3]; salary = Math.max(5, salary - 2); }
+    else if (t < ch) { trait = OPS_TRAITS[4]; supports = 3; salary = 3 + 2 * 4 + ri(0, 3); } // 3-cap at a 2-cap price: the bait
+    else if (t < du) { supports = 1; salary = 3 + 4 + ri(6, 10); quirk = pick(OPS_DUD_QUIRKS); } // hidden: senior price, junior coverage
+    else if (t < du + 0.08) salary += ri(4, 8); // plain overpriced, no upside
   }
   return {
     id: uid++, kind: 'ops', name: genName(false),
     role: OPS_ROLES[rIdx], salary, supports, trait,
-    quirk: pick(OPS_QUIRKS),
+    quirk,
     icon: 'ops_' + (rIdx + 1),
   };
 }
@@ -184,6 +190,7 @@ function newGame(tankId) {
   for (let i = 0; i < t.scholars; i++) G.scholars.push(genScholar(true));
   for (let i = 0; i < t.ops; i++) G.ops.push(genOps(true));
   t.donors.forEach(id => G.donors.push(mkDonorInstance(id)));
+  rollChaos();
   while (G.fights.length < TUNE.fightSlots) drawFight();
   while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
   while (G.hireMarket.length < TUNE.hireSlots) drawHire();
@@ -194,12 +201,20 @@ function newGame(tankId) {
 }
 
 // ---------- derived numbers ----------
-function supportCap() { return G.ops.reduce((a, o) => a + (o.supports || TUNE.supportRatio), 0); }
+function supportCap() { return G.ops.reduce((a, o) => a + (o.flaked ? 0 : (o.supports || TUNE.supportRatio)), 0); }
+
+function rollChaos() {
+  G.ops.forEach(o => { o.flaked = !!(o.trait && o.trait.id === 'chaotic' && Math.random() < TUNE.chaosFlakeChance); });
+}
 
 function production() {
   const cap = supportCap();
   let sum = 0;
-  G.scholars.forEach((s, i) => { sum += i < cap ? s.out : Math.floor(s.out * TUNE.unsupportedMult); });
+  G.scholars.forEach((s, i) => {
+    let out = i < cap ? s.out : Math.floor(s.out * TUNE.unsupportedMult);
+    if (s.mope > 0) out = Math.floor(out * TUNE.moraleMult);
+    sum += out;
+  });
   PROGRAMS.forEach(p => { if (G.programs[p.id]) sum += p.inf; });
   G.ops.forEach(o => { if (o.trait && o.trait.id === 'inf') sum += 2; });
   return sum;
@@ -802,6 +817,9 @@ function endMonth() {
   const costs = monthlyCosts();
   G.cash -= costs;
 
+  // 6.45 moping fades a notch each month
+  G.scholars.forEach(s => { if (s.mope > 0) s.mope--; });
+
   // 6.5 unsupported scholars lose patience (paid this month, then they quit)
   const cap = supportCap();
   const quitting = [];
@@ -889,6 +907,9 @@ function endMonth() {
   while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
   while (G.fights.length < TUNE.fightSlots) drawFight();
 
+  // 8.4 chaotic ops roll their attendance for the coming month
+  rollChaos();
+
   // 8.5 a crisis may land (never two at once)
   if (!G.crisis && Math.random() < TUNE.crisisChance) drawCrisis(news);
 
@@ -941,6 +962,10 @@ function resolveFight(f, news) {
     : topRival ? `${topRival} banks the victory.` : 'Nobody in particular claims it.';
 
   if (winner.yours > 0) {
+    G.scholars.forEach(s => { if (s.tag === f.tag && s.mope > 0) { s.mope = 0; logLine(`${s.name} is buoyed by the ${f.tag} win — morale restored.`); } });
+  }
+
+  if (winner.yours > 0) {
     const share = winner.total > 0 ? winner.yours / winner.total : 1;
     const R = fightReward(f);
     const gains = [];
@@ -968,6 +993,20 @@ function resolveFight(f, news) {
     logLine(`${playerBanks ? 'VICTORY BANKED' : 'Backed the winner'}: ${f.title} → ${gains.join('; ')} (${Math.round(share * 100)}% of the winning side).`);
   } else if (loser.yours > 0) {
     G.stats.lost++;
+    // morale: a contested loss deflates the matching bench; a repeat loss
+    // while they're already moping sends some packing
+    const bench = G.scholars.filter(s => s.tag === f.tag);
+    const quitters = [];
+    bench.forEach(s => {
+      if (s.mope > 0 && Math.random() < TUNE.moraleQuitChance) quitters.push(s);
+      else s.mope = TUNE.moraleMonths;
+    });
+    quitters.forEach(s => {
+      G.scholars = G.scholars.filter(x => x !== s);
+      news.push({ h: `${s.name.toUpperCase()} LEAVES FOR GREENER PASTURES`, s: `The ${f.tag} losses, they say, “weren't why.” They were why.` });
+      logLine(`${s.name} quit after another ${f.tag} defeat — morale matters.`);
+    });
+    if (bench.length > quitters.length) logLine(`Your ${f.tag} bench is demoralized: output −${Math.round((1 - TUNE.moraleMult) * 100)}% for ${TUNE.moraleMonths} months (a ${f.tag} win snaps them out of it).`);
     sub += ` ${creditLine} ${tank().short} spent ${loser.yours} influence on the losing side. A fellow calls it “directionally correct.”`;
     news.push({ h: `${upset ? 'UPSET: ' : ''}${f.title.toUpperCase()} — RESOLVED`, s: sub, meter });
     logLine(`LOSS: ${f.title}. ${loser.yours} influence down the drain.`);
@@ -1150,7 +1189,7 @@ function renderStaff(cap) {
         ${iconImg(s.icon)}
         <div class="pcontent">
           <div class="pline">
-            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)} ${leanChip(s.lean || 0)}${s.from ? ` <span class="chip" title="Poached from a rival">ex-${s.from}</span>` : ''}${s.diva ? ` <span class="chip diva" title="Brilliant, impossible: every month there's a ${Math.round(TUNE.divaQuitChance * 100)}% chance a colleague quits over them.">🔥 DIVA</span>` : ''}
+            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)} ${leanChip(s.lean || 0)}${s.mope > 0 ? ` <span class="chip raid" title="Demoralized by a ${s.tag} defeat: output −${Math.round((1 - TUNE.moraleMult) * 100)}% for ${s.mope} more month${s.mope > 1 ? 's' : ''}. Losing ${s.tag} again risks their departure; a ${s.tag} win restores them instantly.">😞 −${Math.round((1 - TUNE.moraleMult) * 100)}%</span>` : ''}${s.from ? ` <span class="chip" title="Poached from a rival">ex-${s.from}</span>` : ''}${s.diva ? ` <span class="chip diva" title="Brilliant, impossible: every month there's a ${Math.round(TUNE.divaQuitChance * 100)}% chance a colleague quits over them.">🔥 DIVA</span>` : ''}
             ${supported ? '' : `<span class="warn" title="No ops support — half output, and they quit after ${TUNE.scholarStrikeLimit} straight unsupported months">⚠ half rate · patience ${'●'.repeat(s.strikes || 0)}${'○'.repeat(Math.max(0, TUNE.scholarStrikeLimit - (s.strikes || 0)))}${(s.strikes || 0) === TUNE.scholarStrikeLimit - 1 ? ' — one more month and they quit' : ''}</span>`}
           </div>
           <div class="pline dim">✦ ${supported ? s.out : Math.floor(s.out * TUNE.unsupportedMult)}/mo · ${fmtMoney(s.salary)}/mo</div>
@@ -1168,8 +1207,8 @@ function renderStaff(cap) {
       <div class="person">
         ${iconImg(o.icon)}
         <div class="pcontent">
-          <div class="pline"><b>${o.name}</b>${o.trait ? ` <span class="chip ${o.trait.id === 'expense' ? 'raid' : 'want'}" title="${o.trait.tip}">${o.trait.label}</span>` : ''}</div>
-          <div class="pline dim">${o.role} · supports <b>${o.supports || TUNE.supportRatio}</b> · ${fmtMoney(o.salary)}/mo</div>
+          <div class="pline"><b>${o.name}</b>${o.trait ? ` <span class="chip ${o.trait.id === 'expense' || o.trait.id === 'chaotic' ? 'raid' : 'want'}" title="${o.trait.tip}">${o.trait.label}</span>` : ''}${o.flaked ? ' <span class="chip raid" title="They simply did not come in this month. Zero support delivered.">GHOSTING</span>' : ''}</div>
+          <div class="pline dim">${o.role} · supports <b>${o.flaked ? 0 : (o.supports || TUNE.supportRatio)}</b> · ${fmtMoney(o.salary)}/mo</div>
           <div class="pline quirk">${o.quirk}</div>
           <button class="btn tiny" data-act="fire" data-kind="ops" data-id="${o.id}">Let Go</button>
         </div>
@@ -1349,7 +1388,7 @@ function renderHireMarket() {
         <div class="cardbody mrow">
           ${iconImg(h.icon)}
           <div class="mcontent">
-            <div class="pline"><span class="chip">OPS</span> <span class="dim">${h.role}</span>${h.trait ? ` <span class="chip ${h.trait.id === 'expense' ? 'raid' : 'want'}" title="${h.trait.tip}">${h.trait.label}</span>` : ''}</div>
+            <div class="pline"><span class="chip">OPS</span> <span class="dim">${h.role}</span>${h.trait ? ` <span class="chip ${h.trait.id === 'expense' || h.trait.id === 'chaotic' ? 'raid' : 'want'}" title="${h.trait.tip}">${h.trait.label}</span>` : ''}</div>
             <div class="pline">Supports <b>${h.supports}</b> scholar${h.supports > 1 ? 's' : ''} · ${fmtMoney(h.salary)}/mo</div>
             <div class="pline quirk">${h.quirk}</div>
             <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>

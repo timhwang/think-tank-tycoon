@@ -140,7 +140,7 @@ function botShrewd() {
   });
   // support discipline first (capacity per salary, skip lavish offices)
   while (G.scholars.length > supportCap() && G.cash > 250) {
-    const ops = affordableHires().filter(x => x.h.kind === 'ops' && (!x.h.trait || x.h.trait.id !== 'expense'))
+    const ops = affordableHires().filter(x => x.h.kind === 'ops' && (!x.h.trait || (x.h.trait.id !== 'expense' && x.h.trait.id !== 'chaotic')))
       .sort((a, b) => (b.h.supports / b.h.salary) - (a.h.supports / a.h.salary));
     if (!ops.length) break;
     actHire(ops[0].i);
