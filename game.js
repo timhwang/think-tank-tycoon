@@ -1531,12 +1531,10 @@ function electionDay(news) {
   G.electionResult = { win, rank, victories: G.stats.won };
   sfx(win ? 'win' : 'lose');
   const list = rows.map((r, i) => `${i + 1}. ${r.short} — ${r.v}`).join('   ·   ');
-  const ch = loadChallenge();
-  const chLine = ch ? (G.stats.won > ch.v ? ` You beat ${ch.who}'s ${ch.v}.` : G.stats.won === ch.v ? ` You tied ${ch.who}'s ${ch.v}.` : ` ${ch.who}'s ${ch.v} stands.`) : '';
   const items = [
     win
-      ? { h: `${tank().name.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK IN WASHINGTON`, s: `Election Night, November 2028. ${G.stats.won} policy ${G.stats.won === 1 ? 'victory' : 'victories'} banked since January 2027. The gala will be insufferable.${chLine}`, big: true }
-      : { h: `${rows[0].short.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK; ${tank().short.toUpperCase()} RANKS #${rank}`, s: `Election Night, November 2028. You banked ${G.stats.won} ${G.stats.won === 1 ? 'victory' : 'victories'} to their ${rows[0].v}. There is always the next cycle.${chLine}`, big: true },
+      ? { h: `${tank().name.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK IN WASHINGTON`, s: `Election Night, November 2028. ${G.stats.won} policy ${G.stats.won === 1 ? 'victory' : 'victories'} banked since January 2027. The gala will be insufferable.`, big: true }
+      : { h: `${rows[0].short.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK; ${tank().short.toUpperCase()} RANKS #${rank}`, s: `Election Night, November 2028. You banked ${G.stats.won} ${G.stats.won === 1 ? 'victory' : 'victories'} to their ${rows[0].v}. There is always the next cycle.`, big: true },
     { h: 'FINAL STANDINGS', s: list },
     ...recapItems(rows, rank, win),
     ...news,
@@ -1584,9 +1582,7 @@ function finishReturns() {
   $('#returnsBtn').dataset.act = 'returnsdone';
 }
 
-// ---------- asynchronous multiplayer: challenge links + hall of records ----------
-function loadChallenge() { try { return JSON.parse(localStorage.getItem('ttt-challenge') || 'null'); } catch (e) { return null; } }
-
+// ---------- hall of records (your own finishes) ----------
 function recordRun(rank, win) {
   try {
     const runs = JSON.parse(localStorage.getItem('ttt-runs') || '[]');
@@ -1595,40 +1591,12 @@ function recordRun(rank, win) {
   } catch (e) {}
 }
 
-function makeChallengeLink() {
-  const who = (prompt('Your name, for the challenge banner:') || 'A rival').trim().slice(0, 24) || 'A rival';
-  const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ who, tank: tank().id, tankShort: tank().short, v: G.stats.won, rank: (G.electionResult || {}).rank || 0 }))));
-  const url = `${location.origin}${location.pathname}?challenge=${payload}`;
-  const box = $('#challengeBox');
-  if (box) { box.value = url; box.classList.remove('hidden'); box.select(); }
-  try { navigator.clipboard.writeText(url); flash('Challenge link copied. Send it to someone with opinions.'); }
-  catch (e) { flash('Challenge link ready below — copy it and send it to someone with opinions.'); }
-}
-
-function bootChallenge() {
-  try {
-    const m = location.search.match(/[?&]challenge=([^&]+)/);
-    if (m) {
-      const c = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
-      if (c && c.who && c.tank) localStorage.setItem('ttt-challenge', JSON.stringify(c));
-      history.replaceState(null, '', location.pathname);
-    }
-  } catch (e) {}
-}
-
-function renderChallenge() {
-  const ch = loadChallenge();
-  const box = $('#challengeBanner');
-  if (!box || !box.classList) return;
-  if (!ch) { box.classList.add('hidden'); return; }
-  const t = TANKS.find(x => x.id === ch.tank);
-  box.innerHTML = `🎯 <b>CHALLENGE FROM ${ch.who.toUpperCase()}:</b> beat ${ch.v} ${ch.v === 1 ? 'victory' : 'victories'} running <b>${t ? t.name : ch.tankShort}</b>. <button class="btn tiny" data-act="pick" data-id="${ch.tank}">Accept</button> <button class="btn tiny" data-act="dismisschallenge">Dismiss</button>`;
-  box.classList.remove('hidden');
+function renderHall() {
   let runs = [];
   try { runs = JSON.parse(localStorage.getItem('ttt-runs') || '[]'); } catch (e) {}
   const hall = $('#hallBody');
   if (hall && hall.classList) {
-    hall.innerHTML = runs.length ? runs.map(r => `<div class="pline">${r.when} · <b>${r.tank}</b> · ${r.v} victories · #${r.rank}${r.win ? ' 🏆' : ''}</div>`).join('') : '';
+    hall.innerHTML = runs.map(r => `<div class="pline">${r.when} · <b>${r.tank}</b> · ${r.v} victories · #${r.rank}${r.win ? ' 🏆' : ''}</div>`).join('');
     $('#hallBox').classList.toggle('hidden', !runs.length);
   }
 }
@@ -1669,10 +1637,7 @@ function showPaper(items, isGameOver) {
     `<div class="paper-item"><div class="headline-sm">${i.h}</div>${i.s ? `<div class="subhead-sm">${i.s}</div>` : ''}${meterHTML(i.meter)}</div>`).join('');
   $('#paperBtn').textContent = isGameOver ? 'Start Over' : 'Continue';
   $('#paperBtn').dataset.act = isGameOver ? 'restart' : 'closepaper';
-  const cb = $('#challengeBtn');
-  if (cb && cb.classList) cb.classList.toggle('hidden', !(isGameOver && G.electionResult));
-  const cbox = $('#challengeBox');
-  if (cbox && cbox.classList) cbox.classList.add('hidden');
+
   $('#paper').classList.remove('hidden');
   sfx('paper');
   if (items.some(i => i.meter)) sfx('roll');
@@ -1719,7 +1684,7 @@ function showScreen(which) {
 }
 
 function renderStart() {
-  renderChallenge();
+  renderHall();
   const hasSave = (() => { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const d = JSON.parse(r); return d.G && !d.G.over; } catch (e) { return false; } })();
   $('#resumeBox').classList.toggle('hidden', !hasSave);
   $('#continueRow').innerHTML = hasSave
@@ -1953,7 +1918,6 @@ function renderReport() {
   $('#reportBody').innerHTML = `
     <div class="pline"><b>${tank().name}</b></div>
     <div class="pline quirk">“${tank().motto}”</div>
-    ${(() => { const ch = loadChallenge(); return ch ? `<div class="pline warn">🎯 Challenge: beat ${ch.who}'s ${ch.v} (${ch.tankShort})</div>` : ''; })()}
     <div class="subdivider">RECORD</div>
     <div class="pline">${s.months} months · <b>${s.won} victories banked</b> · ${s.lost} losing sides</div>
     <div class="pline">Peak treasury: ${fmtMoney(s.peakCash)}</div>
@@ -2065,8 +2029,7 @@ document.addEventListener('click', e => {
   else if (act === 'testify') actTestify(+b.dataset.f);
   else if (act === 'returnsdone') { $('#returnsWin').classList.add('hidden'); showPaper(G.finalPaper || [], true); }
   else if (act === 'returnsskip') finishReturns();
-  else if (act === 'challenge') makeChallengeLink();
-  else if (act === 'dismisschallenge') { try { localStorage.removeItem('ttt-challenge'); } catch (e) {} renderStart(); }
+
   else if (act === 'serve') actServe(+b.dataset.id);
   else if (act === 'keep') actKeepScholar(+b.dataset.id);
   else if (act === 'renew') actRenew(b.dataset.id);
@@ -2164,6 +2127,5 @@ document.addEventListener('mouseover', e => {
 document.addEventListener('scroll', () => tipBox.classList.add('hidden'), true);
 
 // ---------- boot ----------
-bootChallenge();
 renderStart();
 showScreen('start');
