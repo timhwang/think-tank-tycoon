@@ -585,3 +585,6 @@ body {
 .recapcell .icon.lg, .badge .icon.lg { width: 40px; height: 40px; }
 .rc-title { font-size: 10px; font-weight: bold; line-height: 1.2; margin-top: 2px; }
 .rc-sub { font-size: 9px; color: #444; line-height: 1.25; }
+
+.rivalname { cursor: help; }
+.intel { font-size: 10px; }

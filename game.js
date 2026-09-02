@@ -156,7 +156,8 @@ function genScholar(starter) {
   }
   // some market scholars are sitting at a rival right now — hiring is a raid
   if (!starter && G && W.rivals && W.rivals.length && Math.random() < TUNE.raidChance) {
-    sch.from = pick(W.rivals).short;
+    const lr = aiLevel() >= 2 && W.leaderShort ? W.rivals.find(x => x.short === W.leaderShort) : null;
+    sch.from = lr && Math.random() < 0.5 ? lr.short : pick(W.rivals).short;
     sch.out += 4;    // proven operator
     sch.salary += 6; // knows it
   }
@@ -226,6 +227,7 @@ function buildRivals(chosenId) {
     tags: t.tags,
     victories: 0,
     conf: TUNE.confStart, dents: [], vendettas: {},
+    ai: t.ai || DEFAULT_AI, chest: 0, plan: {}, eyeing: [], lostByTag: {},
   });
   const chosen = new Set([].concat(chosenId));
   const rivals = TANKS.filter(t => !chosen.has(t.id)).map(mk);
@@ -338,8 +340,10 @@ function drawHire() {
 
 // ---------- new game ----------
 function makeWorld(chosenIds) {
+  const ids = [].concat(chosenIds);
+  const aiLevel = Math.max(0, ...ids.map(id => AI_LEVELS[(TANKS.find(t => t.id === id) || {}).diff] || 0));
   return { month: 0, fights: [], fightDeck: shuffle(FIGHTS.map(f => f.id)), rivals: buildRivals(chosenIds),
-           leaderShort: null, freeze: 0, players: [] };
+           leaderShort: null, freeze: 0, players: [], aiLevel };
 }
 
 // one institution; with no world given it also carries the world fields
@@ -1409,55 +1413,202 @@ function playerLeadsBoard() {
   return rows[0].you && rows[0].v > 0 && (!rows[1] || rows[0].v > rows[1].v);
 }
 
+// Every rival is a budget with a personality. On Easy they sprinkle by fixed
+// weights (the dice). From Medium up they think: price every fight by what it
+// costs to reach target odds AND top credit, fund the cheapest victories, and
+// bank the rest in a war chest whose patience is a matter of style.
+function aiLevel() { return W && W.aiLevel !== undefined ? W.aiLevel : 1; }
+function rivalAI(r) { return r.ai || DEFAULT_AI; }
+function commitRival(r, f, sideIdx, amt) {
+  const s = f.sides[sideIdx];
+  s.total += amt;
+  s.rivals = s.rivals || {};
+  s.rivals[r.short] = (s.rivals[r.short] || 0) + amt;
+}
+// the biggest single backer of a side other than this rival (rivals or humans)
+function sideTopOf(side, exceptShort) {
+  const others = Object.entries(side.rivals || {}).filter(([k]) => k !== exceptShort).map(([, v]) => v);
+  return Math.max(0, ...others, ...Object.values(side.players || {}));
+}
+
+// which side a rival takes in a fight, by style; -1 = sits it out
+function rivalSideChoice(r, f, leaderRow) {
+  const ai = rivalAI(r);
+  const pet = !!f.tag && r.tags.includes(f.tag);
+  const pref = f.sides.findIndex(s => r.align === 0 ? s.lean === 0 : s.lean * r.align > 0);
+  if (ai.style === 'purist' && aiLevel() > 0 && !pet) return pref;   // never crosses, never dabbles
+  let sideIdx = pref;
+  if (sideIdx < 0 && aiLevel() > 0) {
+    if (ai.style === 'dealmaker') sideIdx = f.sides[0].total >= f.sides[1].total ? 0 : 1;      // rides the favorite
+    else if (ai.style === 'insurgent') sideIdx = f.sides[0].total <= f.sides[1].total ? 0 : 1; // hunts upsets
+    else if (ai.style === 'mirror' && leaderRow && leaderRow.short !== r.short) {              // copies the leader
+      const amtOn = s => leaderRow.human ? contribOf(s, leaderRow.pid || null) : ((s.rivals || {})[leaderRow.short] || 0);
+      const a = amtOn(f.sides[0]), b = amtOn(f.sides[1]);
+      if (a !== b) sideIdx = a > b ? 0 : 1;
+    }
+  }
+  if (sideIdx < 0 && pet) {
+    if (f.rivalPicks[r.short] === undefined) f.rivalPicks[r.short] = ri(0, 1);
+    sideIdx = f.rivalPicks[r.short];
+  }
+  // off-issue fights: focused shops mostly sit out (decided once per fight);
+  // a stake already placed is never abandoned
+  if (sideIdx >= 0 && !pet) {
+    f.rivalSkips = f.rivalSkips || {};
+    if (f.rivalSkips[r.short] === undefined) f.rivalSkips[r.short] = Math.random() < TUNE.rivalFocus * (aiLevel() === 0 ? 1 : 0.5 + ai.focus) ? 1 : 0;
+    if (f.rivalSkips[r.short] && !((f.sides[sideIdx].rivals || {})[r.short] > 0)) sideIdx = -1;
+  }
+  return sideIdx;
+}
+
+// Easy: the sprinkler. Fixed weights, everything spent, no memory.
+function rivalCommitsDice(r, budget, lead, hot, leaderRow) {
+  const targets = [];
+  W.fights.forEach(f => {
+    const sideIdx = rivalSideChoice(r, f, leaderRow);
+    if (sideIdx < 0) return;
+    const pet = !!f.tag && r.tags.includes(f.tag);
+    const closing = f.monthsLeft <= 1 ? TUNE.rivalCloserMult : f.monthsLeft === 2 ? 1.5 : 1;
+    const opp = f.sides[1 - sideIdx];
+    const oppTopRival = Math.max(0, ...Object.values(opp.rivals || {}));
+    const leadAmt = lead ? contribOf(opp, lead.pid || null) : 0;
+    const counter = hot && leadAmt > 0 && leadAmt >= oppTopRival ? TUNE.counterBidMult : 1;
+    targets.push({ f, sideIdx, w: (pet ? 2 : 1) * closing * counter * (f.marquee ? 1.5 : 1) });
+  });
+  r.plan = {}; r.eyeing = [];
+  if (!targets.length) return;
+  const wSum = targets.reduce((a, t) => a + t.w, 0);
+  targets.forEach(t => {
+    const amt = Math.floor(budget * t.w / wSum);
+    if (amt > 0) { commitRival(r, t.f, t.sideIdx, amt); r.plan[t.f.defId] = { side: t.sideIdx, amt, title: t.f.title }; }
+  });
+}
+
 function rivalCommits() {
   const lead = humanLeader();
   const hot = !!lead;
+  const rows = standings();
+  const leaderRow = rows[0] && rows[0].v > 0 ? rows[0] : null;
   const drift = 1 + TUNE.rivalDriftPct * W.month;
+  const seasonal = W.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
+  const heat = hot ? TUNE.frontrunnerMult : 1;
+  const level = aiLevel();
   W.rivals.forEach(r => {
-    const targets = [];
+    const income = Math.round(r.budget * drift * seasonal * heat * rivalConfMult(r) * (0.85 + Math.random() * 0.3));
+    r.income = income;
+    if (level === 0) { rivalCommitsDice(r, Math.round(income * (0.9 + Math.random() * 0.2)), lead, hot, leaderRow); return; }
+    const ai = rivalAI(r);
+    r.chest = (r.chest || 0) + Math.round(income * TUNE.aiIncomeMult);
+
+    // what to deploy this month: impatient shops spend as it comes, patient
+    // ones bank for closing months and election season — never past the vote,
+    // and never beyond a few months' income
+    let saveRate = ai.patience * (W.month >= TUNE.electionSeasonStart ? 0.3 : 0.7);
+    if (W.month >= TUNE.electionMonth - 2 || r.chest > income * TUNE.aiChestMonths) saveRate = 0;
+    let left = Math.floor(r.chest * (1 - saveRate));
+    let reserve = r.chest - left;
+
+    // price every fight: what it costs to reach target odds and be the top backer;
+    // a rival sitting on a surplus aims higher and spreads wider — money should
+    // become victories, not a monument
+    const surplus = r.chest / Math.max(1, income);
+    const t = Math.min(0.92, TUNE.aiTargetOdds + (ai.aggression - 1) * 0.1 + (level >= 3 ? 0.06 : 0) + Math.min(0.15, Math.max(0, surplus - 2) * 0.04));
+    const ratio = Math.pow(t / (1 - t), 1 / TUNE.contestK);
+    const plans = [];
     W.fights.forEach(f => {
-      let sideIdx = -1;
-      const pet = f.tag && r.tags.includes(f.tag);
-      const pref = f.sides.findIndex(s => s.lean * r.align > 0);
-      if (pref >= 0) sideIdx = pref;
-      else if (pet) {
-        if (f.rivalPicks[r.short] === undefined) f.rivalPicks[r.short] = ri(0, 1);
-        sideIdx = f.rivalPicks[r.short];
-      }
-      // focused shops sit out fights that aren't their issue (decided once)
-      if (sideIdx >= 0 && !pet) {
-        f.rivalSkips = f.rivalSkips || {};
-        if (f.rivalSkips[r.short] === undefined) f.rivalSkips[r.short] = Math.random() < TUNE.rivalFocus ? 1 : 0;
-        if (f.rivalSkips[r.short]) sideIdx = -1;
-      }
-      if (sideIdx >= 0) {
-        // everyone piles in as the vote nears — last-month sniping meets a wall
-        const closing = f.monthsLeft <= 1 ? TUNE.rivalCloserMult : f.monthsLeft === 2 ? 1.5 : 1;
-        // and the town gangs up on a frontrunner: extra weight against sides
-        // the leader currently tops
-        const opp = f.sides[1 - sideIdx];
-        const oppTopRival = Math.max(0, ...Object.values(opp.rivals || {}));
-        const leadAmt = lead ? contribOf(opp, lead.pid || null) : 0;
-        const counter = hot && leadAmt > 0 && leadAmt >= oppTopRival ? TUNE.counterBidMult : 1;
-        const marquee = f.marquee ? 1.5 : 1;
-        targets.push({ f, sideIdx, w: (r.tags.includes(f.tag) ? 2 : 1) * closing * counter * marquee });
-      }
+      const sideIdx = rivalSideChoice(r, f, leaderRow);
+      if (sideIdx < 0) return;
+      const s = f.sides[sideIdx], opp = f.sides[1 - sideIdx];
+      const mine = (s.rivals || {})[r.short] || 0;
+      const topOther = sideTopOf(s, r.short);
+      const closing = f.monthsLeft <= 1;
+      const pad = Math.round(TUNE.aiBuffer * (closing ? 1.5 : f.monthsLeft) * seasonal);
+      const forOdds = Math.max(0, Math.ceil((opp.total + pad) * ratio) - s.total);
+      const forCredit = Math.max(0, topOther + Math.ceil(pad / 2) - mine);
+      const need = Math.max(forOdds, forCredit, mine > 0 ? 0 : 5);
+      const pet = !!f.tag && r.tags.includes(f.tag);
+      const rw = fightReward(f);
+      let value = (f.marquee ? 2 : 1) * (pet ? 1.3 : 1) * (0.8 + Math.min(0.6, (rw.cash || 0) / 500));
+      // grudges: appetite for sides the human leader tops, for a rival leader's
+      // sides, and for anyone this rival has a vendetta against
+      const leadAmt = lead ? contribOf(opp, lead.pid || null) : 0;
+      if (hot && leadAmt > 0 && leadAmt >= sideTopOf(opp, null)) value *= 1 + 0.4 * ai.grudge;
+      if (leaderRow && !leaderRow.human && leaderRow.short !== r.short && ((opp.rivals || {})[leaderRow.short] || 0) > 0) value *= 1 + 0.25 * ai.grudge;
+      if (players().some(p => (r.vendettas || {})[p.pid || 'me'] && contribOf(opp, p.pid || null) > 0)) value *= 1 + 0.3 * ai.grudge;
+      const alreadyTop = mine > 0 && mine >= topOther;
+      const timing = closing ? 1.4 : f.monthsLeft === 2 ? 1.1 : 0.75;
+      plans.push({ f, sideIdx, need, value, closing, stake: mine > 0, alreadyTop,
+                   score: value * timing * (alreadyTop ? 1.25 : 1) / Math.max(4, need) });
     });
-    if (!targets.length) return;
-    const seasonal = W.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
-    const heat = hot ? TUNE.frontrunnerMult : 1;
-    const budget = Math.round(r.budget * drift * seasonal * heat * rivalConfMult(r) * (0.75 + Math.random() * 0.5));
-    const wSum = targets.reduce((a, t) => a + t.w, 0);
-    targets.forEach(t => {
-      const amt = Math.floor(budget * t.w / wSum);
-      if (amt > 0) {
-        const s = t.f.sides[t.sideIdx];
-        s.total += amt;
-        s.rivals = s.rivals || {};
-        s.rivals[r.short] = (s.rivals[r.short] || 0) + amt;
-      }
-    });
+    plans.sort((a, b) => b.score - a.score);
+
+    // fund the best few, by focus; lost causes wait, stakes get defended
+    const maxFights = Math.max(1, Math.round(1 + (1 - ai.focus) * 3)) + (surplus > 3 ? 1 : 0);
+    const cap = Math.max(10, Math.floor(r.chest * TUNE.aiMaxShare));
+    let funded = 0;
+    r.plan = {}; r.eyeing = [];
+    for (const p of plans) {
+      if (p.need === 0) continue;                                   // already where they want to be
+      if (funded >= maxFights || (p.need > cap && !p.stake)) { r.eyeing.push({ title: p.f.title, side: p.sideIdx }); continue; }
+      const pool = left + (p.closing && p.stake ? reserve : 0);      // a closing stake may raid the reserve
+      const amt = Math.min(p.need, p.stake ? pool : Math.min(pool, cap));
+      if (amt < 3) { r.eyeing.push({ title: p.f.title, side: p.sideIdx }); continue; }
+      commitRival(r, p.f, p.sideIdx, amt);
+      if (amt > left) { reserve -= amt - left; left = 0; } else left -= amt;
+      r.plan[p.f.defId] = { side: p.sideIdx, amt, title: p.f.title };
+      funded++;
+    }
+    // press the advantage: whatever's left beyond a month or two of income
+    // goes on top of the fights already funded, best first
+    const keep = Math.round(income * (1 + ai.patience));
+    let extra = Math.max(0, left - keep);
+    const fundedPlans = plans.filter(p => r.plan[p.f.defId]);
+    if (extra > 0 && fundedPlans.length) {
+      const shares = fundedPlans.length === 1 ? [1] : fundedPlans.map((p, i) => i === 0 ? 0.6 : 0.4 / (fundedPlans.length - 1));
+      fundedPlans.forEach((p, i) => { const add = Math.floor(extra * shares[i]); if (add > 0) { commitRival(r, p.f, p.sideIdx, add); r.plan[p.f.defId].amt += add; left -= add; } });
+    }
+    r.chest = left + reserve;
+    r.eyeing = r.eyeing.slice(0, 2);
   });
+}
+
+// the town reads the rivals' books: hoarding and all-in months make the paper
+function rivalTelegraphs(newsFor) {
+  if (aiLevel() < 1) return;
+  W.rivals.forEach(r => {
+    const funded = Object.values(r.plan || {});
+    const spent = funded.reduce((a, p) => a + p.amt, 0);
+    const big = funded.find(p => p.amt >= 40 && p.amt >= spent * 0.6);
+    if (big && r.allInNews !== big.title && Math.random() < 0.5) {
+      r.allInNews = big.title;
+      newsAll(newsFor, { h: `${r.short.toUpperCase()} GOES ALL-IN ON ${big.title.split(':')[0].toUpperCase()}`, s: `✦${big.amt} in a single month on “${big.title}.” ${r.short} has decided this is the one.` });
+    } else if ((r.chest || 0) >= (r.income || 1) * 3 && (r.hoardNews === undefined || r.hoardNews <= W.month - 4) && Math.random() < 0.5) {
+      r.hoardNews = W.month;
+      newsAll(newsFor, { h: `${r.short.toUpperCase()} SITS ON A WAR CHEST`, s: `Roughly ✦${r.chest} banked and barely a pushpin moved. ${(AI_STYLES[rivalAI(r).style] || AI_STYLES.establishment).hoard}` });
+    }
+  });
+}
+
+// what the leaderboard tells you about a rival's mind
+function rivalTip(r) {
+  const ai = rivalAI(r), st = AI_STYLES[ai.style] || AI_STYLES.establishment;
+  const parts = [`${st.label}: ${st.blurb}`];
+  if (aiLevel() === 0) parts.push('Easy: rolls dice — fixed weights, no memory');
+  else {
+    parts.push(`war chest ✦${r.chest || 0} (income ~✦${r.income || Math.round(r.budget)}/mo)`);
+    const funded = Object.values(r.plan || {}).map(p => `${p.title.split(':')[0]} ✦${p.amt}`);
+    if (funded.length) parts.push(`this month: ${funded.join(', ')}`);
+    if (r.eyeing && r.eyeing.length) parts.push(`eyeing: ${r.eyeing.map(e => e.title.split(':')[0]).join(', ')}`);
+  }
+  if (r.wants) parts.push(`hiring in ${r.wants} after losing there twice`);
+  return parts.join(' · ');
+}
+
+// a Gov Relations Lead reads the rivals' intentions on the fight cards
+function intelText(f, si) {
+  if (aiLevel() < 1 || !specCount('govrel')) return '';
+  const names = W.rivals.filter(r => (r.eyeing || []).some(e => e.title === f.title && e.side === si)).map(r => `${r.short} (✦${r.chest || 0} banked)`);
+  return names.length ? `<div class="pline dim intel" title="Your Gov Relations Lead hears things: these rivals are weighing this side for a future month.">👁 eyeing this side: ${names.join(', ')}</div>` : '';
 }
 
 // ---------- month end ----------
@@ -1469,8 +1620,9 @@ function rivalCommits() {
 // runs world-pre once, player for every human, then world-post.
 
 function monthWorldPre(newsFor) {
-  // 1. rivals pile on
+  // 1. rivals pile on — and the town reads their books
   rivalCommits();
+  rivalTelegraphs(newsFor);
 
   // 2. clocks tick; fights resolve (unless a shutdown froze the Hill)
   if (W.freeze > 0) {
@@ -1652,8 +1804,12 @@ function monthPlayer(news) {
   // 6.56 a rival makes a run at one of your scholars (grudges make it a habit)
   const grudges = W.rivals.filter(r => vendettaAgainstMe(r));
   if (G.scholars.length >= 2 && !G.scholars.some(s => s.poach) && Math.random() < TUNE.poachChance * (grudges.length ? TUNE.vendettaMult : 1)) {
-    const target = pick([...G.scholars].sort((a, b) => b.out - a.out).slice(0, 3));
     const rival = grudges.length ? pick(grudges) : pick(W.rivals);
+    const pool = [...G.scholars].sort((a, b) => b.out - a.out);
+    // with aim: the scholar that hurts them most — your best in the field they
+    // keep losing, else in one of their own issues
+    const wantTag = aiLevel() >= 2 ? [rival.wants, ...rival.tags].find(t => t && pool.some(s => s.tag === t)) : null;
+    const target = wantTag ? pool.find(s => s.tag === wantTag) : pick(pool.slice(0, 3));
     const offer = Math.ceil(target.salary * (1 + ri(25, 40) / 100));
     target.poach = { by: rival.short, salary: offer, deadline: W.month + 1 };
     news.push({ h: `${rival.short.toUpperCase()} MAKES A RUN AT ${target.name.toUpperCase()}`, s: `They're offering ${fmtMoney(offer)}/mo (currently ${fmtMoney(target.salary)}). Match it from the staff panel, or lose them next month.` });
@@ -1669,7 +1825,9 @@ function monthPlayer(news) {
     if (pool.length >= 2 && !G.donors.some(d => d.poach) && Math.random() < TUNE.donorPoachChance * (grudges.length ? TUNE.vendettaMult : 1)) {
       const rival = grudges.length ? pick(grudges) : pick(W.rivals);
       const weak = pool.filter(d => d.strikes > 0 || !demandMet(d) || d.flaw === 'fickle');
-      const target = weak.length ? pick(weak) : [...pool].sort((a, b) => b.grant - a.grant)[0];
+      // with aim: the wobbly donor who'd fit their shop best
+      const fits = aiLevel() >= 2 ? weak.filter(d => (d.demand.tag && rival.tags.includes(d.demand.tag)) || d.lean * rival.align > 0) : [];
+      const target = fits.length ? pick(fits) : weak.length ? pick(weak) : [...pool].sort((a, b) => b.grant - a.grant)[0];
       target.poach = { by: rival.short, deadline: W.month + 1, cost: recultivateCost(target) };
       news.push({ h: `${rival.short.toUpperCase()} COURTS ${target.name.toUpperCase()}`, s: `A dinner, a deck, a naming opportunity. Re-cultivate them for ✦${target.poach.cost} from the donor panel this month, or the ${fmtMoney(target.grant)}/mo follows the flattery.` });
       logLine(`${rival.short} is courting ${target.name} — re-cultivate (✦${target.poach.cost}) or lose them next month.`);
@@ -1824,7 +1982,19 @@ function resolveFight(f, newsFor) {
   }
   // rivals who carried a third or more of the losing pile feel it at home
   Object.entries(loser.rivals || {}).forEach(([short, amt]) => {
-    if (loser.total > 0 && amt >= loser.total * 0.3) { const r = W.rivals.find(x => x.short === short); if (r) bumpRivalConf(r, TUNE.rivalConfLoss); }
+    if (loser.total > 0 && amt >= loser.total * 0.3) {
+      const r = W.rivals.find(x => x.short === short);
+      if (!r) return;
+      bumpRivalConf(r, TUNE.rivalConfLoss);
+      r.lostByTag = r.lostByTag || {};
+      r.lostByTag[f.tag] = (r.lostByTag[f.tag] || 0) + 1;
+      if (aiLevel() >= 2 && f.tag && r.lostByTag[f.tag] >= 2) {
+        if (!r.tags.includes(f.tag) && r.tags.length < 4) {
+          r.tags.push(f.tag); r.lostByTag[f.tag] = 0;
+          newsAll(newsFor, { h: `${r.short.toUpperCase()} ADDS ${f.tag} TO ITS PORTFOLIO`, s: `Two losses in ${TAG_NAMES[f.tag]} and one strategy memo later, ${r.short} is staffing up in the field. Expect them in every ${f.tag} fight from here.` });
+        } else r.wants = f.tag;   // hire into it — off someone else's bench
+      }
+    }
   });
   const creditName = topHuman ? (topHuman.name ? `${tankOf(topHuman).short} (${topHuman.name})` : tankOf(topHuman).short) : topRival;
 
@@ -2149,7 +2319,7 @@ function renderStart() {
     <div class="card tankcard">
       <div class="cardhead">${iconImg('tank_' + t.id, 'lg')}<span>${t.name}</span></div>
       <div class="cardbody">
-        <div class="tankmeta">${leanChip(t.align)} <span class="chip">${t.size}</span> <span class="chip">${t.diff}</span></div>
+        <div class="tankmeta">${leanChip(t.align)} <span class="chip">${t.size}</span> <span class="chip" title="${AI_LEVEL_TEXT[t.diff] || ''}">${t.diff}</span></div>
         <div class="motto">“${t.motto}”</div>
         <div class="blurb">${t.blurb}</div>
         <div class="statline">💰 ${fmtMoney(t.cash)} · 👤 ${t.scholars} scholars, ${t.ops} ops · 🎩 ${t.donors.length} donor${t.donors.length === 1 ? '' : 's'} · ✦ ${t.influence}</div>
@@ -2382,7 +2552,7 @@ function renderFights() {
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="25">+25</button>
               </span>
             </div>
-            <div class="backers dim">${backersText(s)}</div>`).join('')}
+            <div class="backers dim">${backersText(s)}</div>${intelText(f, si)}`).join('')}
         </div>
       </div>`;
   }).join('');
@@ -2405,7 +2575,7 @@ function renderReport() {
     const oppo = !row.you && !G.over ? `<button class="btn tiny oppo" data-act="oppo" data-target="${row.human ? row.pid : row.short}" title="Commission an oppo file on ${row.short} (✦${oppoCost()}, ${Math.round(oppoOdds() * 100)}% to land): their donor confidence ${TUNE.oppoHit}, or it blows back on yours (${TUNE.oppoBlowback}). One a month; each file costs ✦${TUNE.oppoStep} more than the last.${row.human ? '' : ' Either way they take it personally.'}" ${G.oppoMonth === W.month || G.influence < oppoCost() ? 'disabled' : ''}>📁</button>` : '';
     return `<tr class="${row.you ? 'you' : ''}">
       <td class="rank">${i + 1}</td>
-      <td>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}${row.pname ? ` <span class="dim">· ${row.pname}</span>` : ''}${row.you ? (i === 0 && row.v > 0 ? ' ★ <span title="You lead the board: the whole town is spending harder and counter-bidding the sides you top.">🔥</span>' : ' ★') : (row.human && i === 0 && row.v > 0 ? ' 🔥' : '')}</td>
+      <td><span ${rival ? `class="rivalname" title="${rivalTip(rival)}"` : ''}>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}</span>${row.pname ? ` <span class="dim">· ${row.pname}</span>` : ''}${rival && aiLevel() >= 1 && (rival.chest || 0) >= (rival.income || rival.budget) * 3 ? ` <span class="chip" title="War chest: ✦${rival.chest} banked. Expect it in a closing month.">🏦</span>` : ''}${row.you ? (i === 0 && row.v > 0 ? ' ★ <span title="You lead the board: the whole town is spending harder and counter-bidding the sides you top.">🔥</span>' : ' ★') : (row.human && i === 0 && row.v > 0 ? ' 🔥' : '')}</td>
       <td>${leanChip(row.align)}</td>
       <td class="amt">${row.v}</td>
       <td class="amt dim">${budget}</td>

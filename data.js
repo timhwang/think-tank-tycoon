@@ -37,15 +37,20 @@ const TUNE = {
   rivalBudgetMult: 0.96, // global scaler on rival influence budgets
   rivalFlat: 14,         // rival budget = (flat + base*slope) * mult...
   rivalSlope: 0.5,       // ...flat>0 compresses the spread between big and small tanks
-  rivalCloserMult: 2.2,  // rivals weight fights in their final month this much harder
+  rivalCloserMult: 1.6,  // (dice rivals) weight fights in their final month this much harder
   rivalFocus: 0.45,      // odds a rival sits out a fight outside its pet issues
   contestK: 3.2,         // resolution odds curve: P = A^k/(A^k+B^k); higher = less upset-prone
   crisisChance: 0.16,    // monthly odds a crisis lands (never two at once)
   electionSeasonStart: 16, // month index when election season begins (6 months out)
   electionSeasonMult: 1.5, // rival budgets scale by this during election season
-  rivalDriftPct: 0.012,  // rival budgets compound this much per month (they grow too)
-  frontrunnerMult: 1.3,  // rival spending scales by this while YOU lead the board
-  counterBidMult: 1.6,   // extra rival weight against sides the frontrunner leads
+  rivalDriftPct: 0.006,  // rival budgets compound this much per month (they grow too)
+  frontrunnerMult: 1.15, // rival spending scales by this while YOU lead the board
+  counterBidMult: 1.3,   // (dice rivals) extra weight against sides the frontrunner leads
+  aiTargetOdds: 0.8,     // thinking rivals fund a side up to these win odds (aggression shifts it)
+  aiBuffer: 12,          // ...padded per month left, since the other side keeps piling on
+  aiMaxShare: 0.6,       // no single new fight gets more than this share of a rival's chest
+  aiChestMonths: 6,      // a chest bigger than this many months' income gets spent regardless
+  aiIncomeMult: 1.1,     // thinking rivals (Medium+) earn this much more per month than dice rivals
   courtCostMult: 1.5,    // global scaler on donor courting costs
   scholarOutMult: 1.08,  // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
@@ -151,6 +156,7 @@ const TANKS = [
     blurb:'The establishment. A marble building full of former officials waiting to become current officials again.',
     cash:2400, rent:80, scholars:4, ops:2, influence:20,
     donors:['waterworks','tomorrow'], budget:45, tags:['TAX','HLTH','TRADE'],
+    ai:{ style:'establishment', focus:0.35, patience:0.3, aggression:0.95, grudge:0.5 },
   },
   {
     id:'legacy', name:'The Legacy Foundation', short:'Legacy',
@@ -159,6 +165,7 @@ const TANKS = [
     blurb:'A battleship with a gift shop. Twelve field marshals of the culture war and a truly excellent mailing list.',
     cash:2200, rent:70, scholars:4, ops:2, influence:20,
     donors:['pemberton','hexagon'], budget:45, tags:['TAX','DEF','CLIM'],
+    ai:{ style:'battleship', focus:0.9, patience:0.5, aggression:1.1, grudge:0.8 },
   },
   {
     id:'forum', name:'The Free Enterprise Forum', short:'The Forum',
@@ -167,6 +174,7 @@ const TANKS = [
     blurb:'Tweedy, respectable, pro-business. Hosts the politest disagreements in town, with sandwiches.',
     cash:1100, rent:45, scholars:3, ops:2, influence:35,
     donors:['retail'], budget:30, tags:['TAX','TRADE','TECH'],
+    ai:{ style:'dealmaker', focus:0.5, patience:0.2, aggression:0.8, grudge:0.3 },
   },
   {
     id:'momentum', name:'Center for American Momentum', short:'Momentum',
@@ -175,6 +183,7 @@ const TANKS = [
     blurb:'Runs on cold brew and five-point plans. Everyone on staff is either 29 or 63.',
     cash:900, rent:45, scholars:3, ops:2, influence:25,
     donors:['assembly'], budget:30, tags:['HLTH','CLIM','TECH'],
+    ai:{ style:'insurgent', focus:0.6, patience:0.3, aggression:1.2, grudge:0.7 },
   },
   {
     id:'hand', name:'The Invisible Hand Society', short:'The Hand',
@@ -183,6 +192,7 @@ const TANKS = [
     blurb:'Six people with four opinions each. The newsletter is, by all accounts, legendary.',
     cash:520, rent:25, scholars:2, ops:1, influence:40,
     donors:['ashgrove'], budget:18, tags:['TAX','TECH','TRADE'],
+    ai:{ style:'sniper', focus:0.8, patience:0.9, aggression:1.0, grudge:0.6 },
   },
   {
     id:'subsidiarity', name:'The Subsidiarity Project', short:'Subsidiarity',
@@ -191,13 +201,40 @@ const TANKS = [
     blurb:'Three converts and a fax machine, arguing that everything went wrong in 1789.',
     cash:360, rent:15, scholars:1, ops:1, influence:55,
     donors:[], budget:10, tags:['HLTH','TECH'],
+    ai:{ style:'purist', focus:0.7, patience:0.4, aggression:0.7, grudge:0.9 },
   },
 ];
+
+// ------------------------------------------------------------
+// Rival brains. Every rival has a style (how it picks sides and how many
+// fights it funds), plus four knobs: focus (1 = pick one fight and close it),
+// patience (1 = bank everything for the big votes), aggression (target odds),
+// grudge (appetite for whoever leads, and for anyone who crossed it).
+// The chosen institution's difficulty sets how much of this the rivals use.
+// ------------------------------------------------------------
+const DEFAULT_AI = { style:'establishment', focus:0.5, patience:0.3, aggression:1, grudge:0.5 };
+const AI_STYLES = {
+  establishment: { label:'The Establishment', blurb:'funds broadly and defends every lead it holds', hoard:'The board prefers to be seen spending.' },
+  battleship:    { label:'The Battleship',    blurb:'picks one or two fights and closes them hard', hoard:'Twelve field marshals are waiting for the right hill.' },
+  dealmaker:     { label:'The Dealmaker',     blurb:'rides the favorite for cheap credit',           hoard:'They are, as ever, waiting to see which way it breaks.' },
+  insurgent:     { label:'The Insurgent',     blurb:'backs underdog sides and hunts upsets',         hoard:'The cold brew is being rationed for something.' },
+  sniper:        { label:'The Sniper',        blurb:'hoards for months, then dumps it all in a final month', hoard:'The newsletter says nothing. That is the tell.' },
+  purist:        { label:'The Purist',        blurb:'only fights on its own lean, never crosses',    hoard:'The fax machine is warm.' },
+  mirror:        { label:'The Mirror',        blurb:'copies whichever side the leader takes',        hoard:'Their model has recommended patience.' },
+};
+const AI_LEVELS = { Easy: 0, Medium: 1, Hard: 2, Expert: 3 };
+const AI_LEVEL_TEXT = {
+  Easy:   'Rivals roll dice: fixed spending weights, no memory, no plan.',
+  Medium: 'Rivals think: they price every fight, fund the cheapest victories, and bank war chests for the big votes.',
+  Hard:   'Rivals also poach with aim — your best scholar in their issue — and adapt to the fields they keep losing.',
+  Expert: 'All of that, with sharper target odds and a bigger appetite for whoever leads.',
+};
 
 // Always-on NPC rival, never selectable.
 const NPC_TANKS = [
   { id:'bland', name:'The BLAND Corporation', short:'BLAND',
-    motto:'We Have Modeled This.', align:0, budget:40, tags:['DEF','TECH'] },
+    motto:'We Have Modeled This.', align:0, budget:40, tags:['DEF','TECH'],
+    ai:{ style:'mirror', focus:0.5, patience:0.5, aggression:0.9, grudge:0.2 } },
 ];
 
 // ------------------------------------------------------------
