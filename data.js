@@ -455,8 +455,11 @@ const SCHOLAR_QUIRKS = [
   'Predicted everything, shortly after it happened.',
 ];
 
+// support-staff titles (icon slots ops_1..ops_8). Fundraising-coded names are
+// reserved for roles that actually move donor stewardship (Development
+// Director, RAINMAKER), so none of these sound like development.
 const OPS_ROLES = [
-  'Development Associate','Events Coordinator','Comms Director','Grants Manager',
+  'Logistics Coordinator','Events Coordinator','Comms Coordinator','Finance Manager',
   'Office Manager','Executive Assistant to the President','AV Guy (Indispensable)','Intern Wrangler',
 ];
 

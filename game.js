@@ -1301,6 +1301,9 @@ function load() {
       (G.scholars || []).forEach(s => { if (s.strikes === undefined) s.strikes = 0; });
       (G.rivals || []).forEach(r => { if (r.victories === undefined) r.victories = 0; });
       if (G.confidence === undefined) { G.confidence = TUNE.confStart; G.confLog = []; G.courtsThisMonth = 0; }
+      // retired support titles that sounded like development staff
+      const retitled = { 'Development Associate': 'Logistics Coordinator', 'Grants Manager': 'Finance Manager', 'Comms Director': 'Comms Coordinator' };
+      [...(G.ops || []), ...(G.hireMarket || [])].forEach(o => { if (o.kind === 'ops' && !o.spec && retitled[o.role]) o.role = retitled[o.role]; });
       if (!G.v || G.v < 2) { // rebase rival budgets onto the tuned scale
         const defs = TANKS.concat(NPC_TANKS);
         (G.rivals || []).forEach(r => {

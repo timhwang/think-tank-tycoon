@@ -169,10 +169,10 @@ ICONS = {
     'donor_gilt':       'an ornate gilded picture frame containing a smaller gilded picture frame',
 
     # ---- ops staff by role, order matches OPS_ROLES in data.js (8) ----
-    'ops_1': 'a young development associate buried behind a huge stack of donor envelopes',   # Development Associate
+    'ops_1': 'a young development associate buried behind a huge stack of donor envelopes',   # Logistics Coordinator (icon reused)
     'ops_2': 'an events coordinator wearing a headset and hugging a clipboard',              # Events Coordinator
-    'ops_3': 'a communications director shouting into two telephones at once',               # Comms Director
-    'ops_4': 'a grants manager with a green accountant visor and a desk calculator',         # Grants Manager
+    'ops_3': 'a communications director shouting into two telephones at once',               # Comms Coordinator
+    'ops_4': 'a grants manager with a green accountant visor and a desk calculator',         # Finance Manager (icon reused)
     'ops_5': 'an office manager holding a giant ring of labeled keys and a toolbox',         # Office Manager
     'ops_6': 'an executive assistant balancing a coffee carrier and a tower of binders',     # Executive Assistant
     'ops_7': 'a cheerful technician tangled in AV cables holding a projector remote',        # AV Guy (Indispensable)
