@@ -1,0 +1,12 @@
+name = "think-tank-tycoon"
+account_id = "9806abe8772d7b6b27b5556e688e435d"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+[[durable_objects.bindings]]
+name = "CAMPAIGN"
+class_name = "Campaign"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Campaign"]

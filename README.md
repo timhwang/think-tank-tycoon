@@ -41,6 +41,22 @@ STAFF ──produce──▶ INFLUENCE ──spent on──▶ POLICY FIGHTS ─
 - **The town hates a winner.** Rival budgets drift upward all game, crisis price tags scale with your treasury and production, and whenever you lead the leaderboard (🔥) every rival spends ~30% harder and throws extra weight against the sides you top. Sandbagging at #2 until late is a legitimate strategy.
 - **Losing.** Two consecutive months in the red and the institution folds before the election. The treadmill is real: every December payroll rises 9%, donor grants sunset on 10–20 month cycles, and scholars quit after two straight months without ops support.
 
+## Playing together (online campaigns)
+
+Two to six humans in one shared campaign, each running a different institution; the unpicked ones play as AI rivals. From the start screen, **create a campaign** and send the five-letter code, or **join** one. Everyone shares the same fight board (you can back the same side as a friend and outbid them for the credit), humans appear on the leaderboard and in the ⚑ backer lines by name, and the month advances only when every player has ended theirs.
+
+The server is a Cloudflare Worker with one **Durable Object per campaign** (`worker/`). It runs the *same* engine as the browser: `tools/build-worker.js` bundles `data.js` + `game.js` with browser stubs into `worker/src/engine.js`, and the Worker calls `createCampaign` / `applyAction` / `resolveMonth` / `viewFor` on it. The client (`game.js`, the `NET` section) renders the server's view and forwards actions; it never mutates state locally while online.
+
+```
+cd worker && npm install
+npm run dev      # rebuild the engine bundle and run locally on :8787
+npm run deploy   # rebuild and deploy to <name>.<account>.workers.dev
+```
+
+Rebuild the bundle (`node tools/build-worker.js`) after any change to `data.js` or `game.js`, then redeploy. The client's default server URL is `NET_DEFAULT_URL` in `game.js`; set `localStorage['ttt-net-url']` to point a browser at a local Worker.
+
+Engine notes for the shared world: `W` holds world state (month, fights, decks, rivals, calendar), `G` the current institution; single-player sets `W === G`. Fight-side contributions are per player (`side.players[pid]`), victory credit goes to the top contributor among rivals *and* humans, and the month runs in three phases — `monthWorldPre` (rivals, resolution, the town) once, `monthPlayer` per human, `monthWorldPost` (board refill, calendar, election) once.
+
 ## Balance
 
 Tuned by Monte Carlo (`node tools/simulate.js [runs]`), which stubs the DOM, loads the real engine, and drives three bot strategies through the full 22-month campaign. Current numbers (300 runs/cell, win = ranked #1 on Election Night):
@@ -78,6 +94,8 @@ Bottom row: **Your Institution** (staff / programs / donors) beside the **HQ Rep
 | `og.jpg` | social sharing card (JPEG ≤ ~300KB — big PNGs make unfurl scrapers give up) |
 | `tools/gen_icons.py` | icon/social-card generator (OpenAI Images API → 64×64 quantized pixel art) |
 | `tools/simulate.js` | Monte Carlo balance harness (real engine, stubbed DOM, bot strategies) |
+| `tools/build-worker.js` | bundles the engine for the Worker (`worker/src/engine.js`, generated) |
+| `worker/` | Cloudflare Worker + Durable Object campaign server (`src/index.js`) |
 
 All balance lives in `TUNE` (top of `data.js`) and the deck entries — tweak numbers there, no engine changes needed.
 

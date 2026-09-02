@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 
@@ -39,6 +39,25 @@
   <div class="window" id="startDialog">
     <div class="titlebar">SELECT YOUR INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
     <div id="tankPicker"></div>
+  </div>
+  <div class="window" id="onlineBox">
+    <div class="titlebar">PLAY ONLINE — A SHARED CAMPAIGN <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+    <div class="wbody">
+      <div id="onlineForm">
+        <div class="netrow">Your name <input id="netName" maxlength="24" placeholder="e.g. Tim"> &nbsp; Institution <select id="netTank"></select></div>
+        <div class="netrow"><button class="btn" data-act="netcreate">Create a campaign</button> &nbsp; or join code <input id="netCode" maxlength="5" placeholder="ABCDE" class="codebox"> <button class="btn" data-act="netjoin">Join</button></div>
+        <div class="pline dim">Two to six humans, each running a different institution; the rest play as AI rivals. Everyone shares one board — the month advances when every player has ended theirs.</div>
+      </div>
+      <div id="lobby" class="hidden">
+        <div class="pline">Campaign code: <b class="codebig" id="lobbyCode"></b> <span class="dim">— send it to the others</span></div>
+        <div id="lobbyPlayers"></div>
+        <div class="netrow">
+          <button class="btn big hidden" id="lobbyStart" data-act="netstart">Start the campaign ▶</button>
+          <span class="dim hidden" id="lobbyWait">Waiting for the host to start…</span>
+          <button class="btn tiny" data-act="netleave">Leave</button>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="window hidden" id="hallBox">
     <div class="titlebar">HALL OF RECORDS <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
@@ -62,6 +81,7 @@
     <div class="tbgroup"><span class="tblabel">INFLUENCE</span><span class="tbval" id="tbInf"></span></div>
     <div class="tbgroup"><span class="tblabel">STAFF</span><span class="tbval" id="tbStaff"></span></div>
     <span class="tbspacer"></span>
+    <span class="chip" id="netChip"></span>
     <button class="btn" data-act="help">?</button>
     <button class="btn" data-act="tutorial" title="Replay the guided tour of every panel">Tour</button>
     <button class="btn" id="muteBtn" data-act="mute" title="Sound on — click to mute">🔊</button>
@@ -131,6 +151,12 @@
   <div class="wbody" id="programsBody"></div>
 </div>
 
+<!-- ================= ONLINE: WAITING ON THE OTHERS ================= -->
+<div id="waitWin" class="window hidden">
+  <div class="titlebar">⏳ MONTH ENDED</div>
+  <div class="wbody"><div class="pline">Waiting for <b id="waitNames"></b> to end the month. You can look around; actions are locked until the paper lands.</div></div>
+</div>
+
 <!-- ================= ELECTION NIGHT RETURNS ================= -->
 <div id="returnsWin" class="window hidden">
   <div class="titlebar crisisbar">🗳 ELECTION NIGHT — RETURNS</div>
@@ -192,13 +218,15 @@
     <p>Washington has rhythms. The <b>State of the Union</b> (February) lands a marquee fight with double rewards; the <b>August recess</b> brings no new fights and 20% cheaper courting; November 2027 prints the one-year-out standings; and in <b>March 2028 a presidential campaign wants your endorsement</b>. Rival moves and lead changes make the paper too.</p>
     <p>Now and then the Bugle prints an <b>EXTRA</b> — a scandal, a funder feud, a shutdown that freezes the Hill, a surprise recess — and you must <b>pick your poison</b> before the next month begins. Paid exits scale with your size (a share of treasury or production); free exits hurt differently. The ticker logs everything; the month-end front page reports resolutions, departures, raises, and the verdict on Election Night.</p>
 
-    <div class="subdivider">8 · ELECTION NIGHT, MONEY & LOSING</div>
+    <div class="subdivider">8 · PLAYING TOGETHER</div>
+    <p>From the start screen, <b>create a campaign</b> and send the five-letter code to your rivals, or <b>join</b> one. Each human runs a different institution; the unpicked ones play as AI. Everyone shares the same fight board — you can back the same side as a friend and outbid them for the credit — and the month advances only when every player has ended theirs. Humans appear on the leaderboard by name, and in the ⚑ backer lines.</p>
+    <div class="subdivider">9 · ELECTION NIGHT, MONEY & LOSING</div>
     <p>On Election Night the returns come in live and the board reshuffles; then the Bugle prints the recap — the numbers, <b>why it went that way</b>, the moments, and any titles you earned. The Hall of Records on the start screen keeps your finishes.</p>
     <p>The HQ ledger shows grants, payroll, rent (a flat monthly figure per institution), and programs. Every December payroll rises 9%. End two consecutive months in the red and the institution <b>folds before the election</b>. Otherwise, November 2028 ranks everyone by victories banked — and the top of that list is the only thing that counts.</p>
   </div>
 </div>
 
-<script src="data.js?v=26"></script>
-<script src="game.js?v=26"></script>
+<script src="data.js?v=27"></script>
+<script src="game.js?v=27"></script>
 </body>
 </html>

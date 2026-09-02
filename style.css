@@ -467,6 +467,23 @@ body {
 }
 .rolltext { font-size: 10px; font-style: italic; margin-top: 3px; }
 
+/* ---------- online campaigns ---------- */
+#onlineBox { max-width: 1080px; width: 100%; margin-top: 10px; }
+.netrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; font-size: 12px; }
+#onlineBox input, #onlineBox select { font-family: Verdana, sans-serif; font-size: 11px; padding: 3px 5px; }
+.codebox { width: 78px; text-transform: uppercase; letter-spacing: 2px; }
+.codebig { font-family: 'Silkscreen', Verdana, sans-serif; font-size: 16px; letter-spacing: 3px; }
+#netChip { font-family: 'Silkscreen', Verdana, sans-serif; font-size: 8px; }
+#netChip:empty { display: none; }
+#waitWin {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  width: min(340px, 92vw);
+  z-index: 105;
+  box-shadow: 6px 6px 0 #00000066;
+}
+
 /* ---------- election night returns ---------- */
 #returnsWin {
   position: fixed;

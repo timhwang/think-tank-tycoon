@@ -1,3 +1,5 @@
 .DS_Store
 .openai-key
 tools/og_source.png
+worker/node_modules/
+worker/.wrangler/

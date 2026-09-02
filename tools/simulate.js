@@ -20,6 +20,8 @@ function stubEl() {
     classList: { add() {}, remove() {}, toggle() {} },
     dataset: {},
     style: {},
+    options: [],
+    value: '',
     set innerHTML(v) {}, get innerHTML() { return ''; },
     set textContent(v) {}, get textContent() { return ''; },
     set className(v) {}, get className() { return ''; },

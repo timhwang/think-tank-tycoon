@@ -1,0 +1,15 @@
+{
+  "name": "think-tank-tycoon-worker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cloudflare Worker + Durable Object that runs shared Think Tank Tycoon campaigns",
+  "scripts": {
+    "build": "node ../tools/build-worker.js",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.17"
+  },
+  "type": "module"
+}
