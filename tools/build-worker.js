@@ -63,9 +63,21 @@ export function applyAction(world, pid, type, args) {
     case 'testify': actTestify(n(a.f)); break;
     case 'serve': actServe(n(a.id)); break;
     case 'keep': actKeepScholar(n(a.id)); break;
+    case 'progfocus': actProgFocus(a.tag); break;
     default: return { ok: false, msg: 'Unknown action ' + type };
   }
   return { ok: !__flash, msg: __flash };
+}
+
+// the shot clock ran out on a player with a crisis open: take the free exit
+export function autoCrisis(world, pid) {
+  W = world; G = world.players.find(p => p.pid === pid);
+  if (!G || !G.crisis) return;
+  const def = CRISES.find(c => c.id === G.crisis.id);
+  const affordable = def.choices.map((ch, i) => ({ ch, i, c: crisisCost(ch) }))
+    .filter(x => x.c.cash <= G.cash && x.c.inf <= G.influence);
+  const choice = affordable.find(x => !(x.c.cash || x.c.inf)) || affordable[0] || { i: 0 };
+  actCrisis(choice.i);
 }
 
 export function canEnd(world, pid) {

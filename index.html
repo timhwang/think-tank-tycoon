@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
 
@@ -37,7 +37,7 @@
     </div>
   </div>
   <div class="window" id="startDialog">
-    <div class="titlebar">SELECT YOUR INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+    <div class="titlebar">SINGLE PLAYER — SELECT AN INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
     <div id="tankPicker"></div>
   </div>
   <div class="window" id="onlineBox">
@@ -45,8 +45,9 @@
     <div class="wbody">
       <div id="onlineForm">
         <div class="netrow">Your name <input id="netName" maxlength="24" placeholder="e.g. Tim"> &nbsp; Institution <select id="netTank"></select></div>
+        <div class="netrow">Turn clock <select id="netTurn"><option value="60">1 minute</option><option value="120" selected>2 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option></select> <span class="dim">— when it runs out the month resolves for everyone</span></div>
         <div class="netrow"><button class="btn" data-act="netcreate">Create a campaign</button> &nbsp; or join code <input id="netCode" maxlength="5" placeholder="ABCDE" class="codebox"> <button class="btn" data-act="netjoin">Join</button></div>
-        <div class="pline dim">Two to six humans, each running a different institution; the rest play as AI rivals. Everyone shares one board — the month advances when every player has ended theirs.</div>
+        <div class="pline dim">Two to six humans, each running a different institution; the rest play as AI rivals. Everyone shares one board — the month advances when every player has ended theirs, or when the turn clock runs out.</div>
       </div>
       <div id="lobby" class="hidden">
         <div class="pline">Campaign code: <b class="codebig" id="lobbyCode"></b> <span class="dim">— send it to the others</span></div>
@@ -154,7 +155,7 @@
 <!-- ================= ONLINE: WAITING ON THE OTHERS ================= -->
 <div id="waitWin" class="window hidden">
   <div class="titlebar">⏳ MONTH ENDED</div>
-  <div class="wbody"><div class="pline">Waiting for <b id="waitNames"></b> to end the month. You can look around; actions are locked until the paper lands.</div></div>
+  <div class="wbody"><div class="pline">Waiting for <b id="waitNames"></b> to end the month. You can look around; actions are locked until the paper lands.</div><div class="pline warn" id="waitClock"></div></div>
 </div>
 
 <!-- ================= ELECTION NIGHT RETURNS ================= -->
@@ -205,10 +206,11 @@
     <div class="subdivider">4 · STAFF</div>
     <p><b>Scholars:</b> the tag is their expertise; the lean sets partisan pricing (▼/▲ tips show the exact discount or premium, and hardline ◀◀/▶▶ shops feel both harder). 🔥 <b>DIVAs</b> produce enormously and drive colleagues out. Candidates marked <b>AT [RIVAL]</b> are raids: a 1.5× signing bonus, and that rival's budget takes a permanent dent. Some candidates are simply bad deals — no chip, just numbers that don't add up.</p>
     <p><b>Scholars also act.</b> Some quirks are mechanical: the cable regular mints clout (or gaffes on air), the book tour pays out, the podcast feud swings both ways, the newsletter soothes donors. In a fight's <b>final month</b>, if you have a stake and a matching scholar, your best one can <b>📣 testify</b> — success adds 1.5× their output to your side; a flub costs a quarter of your stake. And the <b>revolving door</b> turns: government occasionally taps a scholar — let them serve for a permanent ally (+10% on that issue's commits) or spend ✦25 to keep them.</p>
+    <p><b>Where talent comes from:</b> left benches run deep in climate, tech and health; right benches in fiscal, defense and trade. A shop hunting outside its movement's strengths finds thin pickings — the <b>Junior Fellows Program</b> is the fix: pick a sourcing focus and every four months a cohort resolves, usually a junior in that field, sometimes nobody, occasionally a star.</p>
     <p><b>Ops:</b> support generalists (1–3 scholars) or zero-support <b>specialists</b> — comms, development, editor, creative, gov relations — plus a consultant who does nothing. <b>CHAOTIC</b> ops sometimes deliver no support at all; <b>EXPENSIVE</b> ones bleed overhead. Rivals periodically <b>bid for your scholars</b>: match (a permanent raise) or let them walk — an unanswered bid defects. Letting ops go costs only severance; letting a scholar go unsettles donors.</p>
 
     <div class="subdivider">5 · DONORS</div>
-    <p>Court donors with ✦ (partisan pricing applies). Grants pay monthly on a <b>10–20 month cycle</b>; when it ends you get a month to <b>renew at half cost on stricter terms</b> (one strike ends a renewed deal) or let it lapse. Every donor has a <b>demand</b> — a scholar on staff, a program running, monthly influence in their pet issue, or ideological purity. An unmet demand is a strike; two and they walk. Perks and flaws are called out (ANCHOR, MEGAPHONE, MATCHING; MEDDLER, FICKLE, JEALOUS), and some blue-chip patrons appear only once your base qualifies.</p>
+    <p>Court donors with ✦ (partisan pricing applies). Grants pay monthly on a <b>10–20 month cycle</b>; when it ends you get a month to <b>renew at half cost on stricter terms</b> (one strike ends a renewed deal) or let it lapse. Every donor has a <b>demand</b> — a scholar on staff, a program running, monthly influence in their pet issue, or ideological purity. An unmet demand is a strike; two and they walk. Perks and flaws are called out (ANCHOR, MEGAPHONE, MATCHING; MEDDLER, FICKLE, JEALOUS), and some blue-chip patrons appear only once your base qualifies. Beware the 🐋 <b>whales</b>: enormous grants that compound 8% a month, tolerate fewer other funders every few months, and add a fresh whim each quarter — take the money and you may wake up owned.</p>
     <p><b>Donor Confidence</b> (HQ Report) is one gauge for the whole base. Departures, firings, courting more than one donor a month, and holding more donors than your development staff can <b>steward</b> (base 3, +2 per Development Director) all shake it; renewals and banked victories restore it, and worries fade slowly. A Watchful base throws nervous strikes; a Spooked one charges more to court and double to renew; in Exodus a donor leaves every month. Parting with a donor also demoralizes the scholars in their issue.</p>
 
     <div class="subdivider">6 · PROGRAMS & PROSPECTING</div>
@@ -219,14 +221,14 @@
     <p>Now and then the Bugle prints an <b>EXTRA</b> — a scandal, a funder feud, a shutdown that freezes the Hill, a surprise recess — and you must <b>pick your poison</b> before the next month begins. Paid exits scale with your size (a share of treasury or production); free exits hurt differently. The ticker logs everything; the month-end front page reports resolutions, departures, raises, and the verdict on Election Night.</p>
 
     <div class="subdivider">8 · PLAYING TOGETHER</div>
-    <p>From the start screen, <b>create a campaign</b> and send the five-letter code to your rivals, or <b>join</b> one. Each human runs a different institution; the unpicked ones play as AI. Everyone shares the same fight board — you can back the same side as a friend and outbid them for the credit — and the month advances only when every player has ended theirs. Humans appear on the leaderboard by name, and in the ⚑ backer lines.</p>
+    <p>From the start screen, <b>create a campaign</b> and send the five-letter code to your rivals, or <b>join</b> one. Each human runs a different institution; the unpicked ones play as AI. Everyone shares the same fight board — you can back the same side as a friend and outbid them for the credit — and the month advances when every player has ended theirs — or when the campaign's <b>turn clock</b> (chosen at creation, counting down in the top bar) runs out, so one absent player never stalls the table; an open crisis takes its free exit. Humans appear on the leaderboard by name, and in the ⚑ backer lines.</p>
     <div class="subdivider">9 · ELECTION NIGHT, MONEY & LOSING</div>
     <p>On Election Night the returns come in live and the board reshuffles; then the Bugle prints the recap — the numbers, <b>why it went that way</b>, the moments, and any titles you earned. The Hall of Records on the start screen keeps your finishes.</p>
     <p>The HQ ledger shows grants, payroll, rent (a flat monthly figure per institution), and programs. Every December payroll rises 9%. End two consecutive months in the red and the institution <b>folds before the election</b>. Otherwise, November 2028 ranks everyone by victories banked — and the top of that list is the only thing that counts.</p>
   </div>
 </div>
 
-<script src="data.js?v=27"></script>
-<script src="game.js?v=27"></script>
+<script src="data.js?v=28"></script>
+<script src="game.js?v=28"></script>
 </body>
 </html>

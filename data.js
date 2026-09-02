@@ -81,6 +81,10 @@ const TUNE = {
   confDrift: 3,          // monthly recovery toward confStart
   stewardBase: 3,        // donors your shop can steward with no development staff
   stewardPerDev: 2,      // extra per Development Director
+  whaleGrowth: 0.08,     // a captured-donor grant compounds this much per month
+  whaleShrinkEvery: 4,   // ...and every N months they tolerate one fewer other funder
+  whaleWalkConf: -25,    // confidence hit when a whale walks (dependence, meet gravity)
+  fellowsEvery: 4,       // junior fellows cohort resolves every N active months
   testifyBase: 0.5,      // testimony success odds before the scholar's output and quirks
   tapChance: 0.03,       // monthly odds a scholar is tapped for government...
   tapConnectedChance: 0.08, // ...higher for the well-connected quirks
@@ -94,6 +98,15 @@ const TUNE = {
 };
 
 const TAGS = ['TAX','DEF','TECH','HLTH','CLIM','TRADE'];
+// where each movement's talent actually comes from: left benches run deep in
+// climate and tech, right benches in fiscal and defense — so a shop hunting
+// outside its movement's strengths pays partisan premiums for thin pickings
+const TAG_WEIGHTS = {
+  '-1': { TAX: 10, DEF: 8, TECH: 25, HLTH: 20, CLIM: 25, TRADE: 12 },
+  '0':  { TAX: 17, DEF: 16, TECH: 17, HLTH: 17, CLIM: 16, TRADE: 17 },
+  '1':  { TAX: 25, DEF: 25, TECH: 10, HLTH: 15, CLIM: 7, TRADE: 18 },
+};
+const HOME_TAGS = { '-1': ['CLIM', 'TECH', 'HLTH'], '0': [], '1': ['TAX', 'DEF', 'TRADE'] };
 const TAG_NAMES = {
   TAX:  'Fiscal Policy',
   DEF:  'Defense & Security',
@@ -291,6 +304,32 @@ const DONORS = [
     blurb:'No notes. No nuance. No compromise.' },
 ];
 
+// ---- donor capture: whales. Enormous, compounding grants — and an appetite
+// for being your only friend. demand WHALE: at most `maxOthers` other active
+// funders (shrinking over time) plus a rotating whim. See whaleMonth().
+const WHALES = [
+  { id:'alkhazar', name:'The Kingdom of Alkhazar Sovereign Wealth Fund', grant:300, cost:90, lean:0, whale:true,
+    demand:{type:'WHALE', maxOthers:3},
+    blurb:'Neither the kingdom nor the fund answers questions. The wire transfers do.' },
+  { id:'vandermeer', name:'The Cornelius Vandermeer Freedom Trust', grant:280, cost:85, lean:1, whale:true,
+    demand:{type:'WHALE', maxOthers:3},
+    blurb:'A trust, in the sense that you must.' },
+  { id:'primedaf', name:'The Prime Intelligence Founders’ DAF', grant:320, cost:95, lean:-1, whale:true,
+    demand:{type:'WHALE', maxOthers:3},
+    blurb:'Donor-advised. The advice is constant, and arrives at 2 a.m.' },
+];
+WHALES.forEach(w => DONORS.push(w));
+
+// whims a whale may add on top of its exclusivity demand
+const WHALE_WHIMS = [
+  { type:'PROGRAM', pid:'gala', text:'wants the Annual Gala Series running (in their honor)' },
+  { type:'PROGRAM', pid:'lobby', text:'wants their name on the Marble Lobby & Donor Wall' },
+  { type:'PROGRAM', pid:'podcast', text:'wants a podcast, and to be on it' },
+  { type:'ROSTER', text:'wants a {TAG} scholar on staff, immediately' },
+  { type:'NOCROSS', text:'will not tolerate {SIDE}-coded positions this cycle' },
+  { type:'ENGAGE', amt:15, text:'wants ✦15/mo pushed into {TAG} fights' },
+];
+
 // Called-out donor perks and flaws (tooltip text; effects live in game.js)
 const DONOR_PERKS = {
   anchor:    { label:'ANCHOR',    tip:'Rock-steady: this grant never enters a renewal cycle — it funds you to the election.' },
@@ -298,6 +337,7 @@ const DONOR_PERKS = {
   matching:  { label:'MATCHING',  tip:'Matches the room: +$4k/mo for every OTHER active donor you keep.' },
 };
 const DONOR_FLAWS = {
+  whale:     { label:'WHALE',     tip:'Enormous and growing (+8%/mo) — and possessive: tolerates fewer other funders every few months, and adds a new arbitrary demand each cycle. Lose them once you depend on them and the floor drops out.' },
   meddler:   { label:'MEDDLER',   tip:'High-maintenance: −8% to all your scholars\' output while they fund you.' },
   fickle:    { label:'FICKLE',    tip:'Flighty: each month a 15% chance they cut their own grant by a third, permanently.' },
   jealous:   { label:'JEALOUS',   tip:'Possessive: takes a strike whenever you court a NEW donor while they fund you.' },
@@ -322,7 +362,7 @@ const PROGRAMS = [
   { id:'warroom', name:'The War Room', cost:10, inf:0,
     blurb:'A map, some string, unlimited pushpins. All fight commits +15%.' },
   { id:'fellows', name:'Junior Fellows Program', cost:12, inf:0,
-    blurb:'They are all named Tyler. Every sixth month, one becomes a real scholar.' },
+    blurb:'They are all named Tyler. Every four months a cohort resolves — usually a junior in your sourcing focus, sometimes nobody, occasionally a star.' },
   { id:'chair', name:'Endowed Chair in Applied Foresight', once:400, cost:4, inf:10,
     blurb:'Named for the donor’s late opinions. Permanent, prestigious, productive.' },
   { id:'wing', name:'The West Annex', once:500, cost:0, inf:0,

@@ -178,6 +178,7 @@ function botShrewd() {
     if (d.perk) v *= 1.25;
     if (d.flaw === 'meddler' || d.flaw === 'jealous') v *= 0.6;
     if (d.flaw === 'fickle') v *= 0.8;
+    if (d.whale) v *= 0.5;
     return v;
   };
   const courtable = G.donorMarket.map((d, i) => ({ d, i }))

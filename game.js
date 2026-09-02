@@ -135,9 +135,15 @@ function genScholar(starter) {
   const r = Math.random();
   const lean = starter ? ((tSign !== 0 && r < 0.6) ? tSign : 0)
                        : (r < 0.3 ? -1 : r < 0.7 ? 0 : 1);
+  // the movement decides what they studied: left benches run deep in climate
+  // and tech, right benches in fiscal and defense. Home-turf scholars are
+  // sharper; the rare crossover in a movement's weak field is mediocre.
+  const tag = weightedTag(lean);
+  if (HOME_TAGS[String(lean)].includes(tag)) out += 2;
+  else if (lean !== 0) out = Math.max(5, out - 2);
   const sch = {
     id: uid++, kind: 'scholar', name, big, lean, diva,
-    tag: pick(TAGS), salary: salary + (big ? 15 : 0) + (diva ? ri(10, 16) : 0), out,
+    tag, salary: salary + (big ? 15 : 0) + (diva ? ri(10, 16) : 0), out,
     quirk: pick(SCHOLAR_QUIRKS),
     icon: 'scholar_' + ri(1, 12),
   };
@@ -164,6 +170,14 @@ const OPS_TRAITS = [
   { id:'expense', label:'EXPENSIVE',    tip:'Runs a lavish office: +$6k/mo in miscellaneous costs.' },
   { id:'chaotic', label:'CHAOTIC',      tip:'Supports 3 on paper — but each month there\'s a 20% chance they deliver nothing at all.' },
 ];
+
+function weightedTag(lean) {
+  const w = TAG_WEIGHTS[String(lean)] || TAG_WEIGHTS['0'];
+  const total = TAGS.reduce((a, t) => a + (w[t] || 0), 0);
+  let r = Math.random() * total;
+  for (const t of TAGS) { r -= (w[t] || 0); if (r <= 0) return t; }
+  return TAGS[TAGS.length - 1];
+}
 
 function genOps(starter) {
   // specialists support nobody; they do one thing (or, if consultants, none)
@@ -574,6 +588,7 @@ function demandText(d) {
   if (dm.type === 'ROSTER') return (dm.count || 1) > 1 ? `Wants ${dm.count} ${dm.tag} scholars on staff` : `Wants a ${dm.tag} scholar on staff`;
   if (dm.type === 'PROGRAM') return `Wants the ${PROGRAMS.find(p => p.id === dm.pid).name} running`;
   if (dm.type === 'ENGAGE') return `Wants ✦${dm.amt}/mo pushed into ${dm.tag} fights`;
+  if (dm.type === 'WHALE') return `Wants to be one of at most ${dm.maxOthers + 1} funders${d.whim ? `; also ${d.whim.text}` : ''}`;
   if (dm.type === 'NOCROSS') {
     const side = d.lean > 0 ? 'left' : 'right';
     return dm.tag ? `Never back ${side}-coded positions on ${dm.tag}` : `Never back ${side}-coded positions, period`;
@@ -590,7 +605,39 @@ function demandMet(d) {
     const onBoard = W.fights.some(f => f.tag === dm.tag);
     return pushed >= dm.amt || !onBoard; // forgiven when their issue isn't up
   }
+  if (dm.type === 'WHALE') {
+    const others = activeDonors().filter(x => x !== d).length;
+    if (others > dm.maxOthers) return false;
+    if (d.whim) return demandMet({ demand: d.whim, lean: d.lean, id: d.id });
+    return true;
+  }
   return true; // NOCROSS strikes are event-driven at commit time
+}
+
+// a whale's whim is a full demand in miniature; NOCROSS whims sting on commit
+function whimAngeredBy(fight, side) {
+  return G.donors.filter(d => d.whim && d.whim.type === 'NOCROSS' && !d.lapsing &&
+    d.lean * side.lean < 0 && !fight.crossed['whim:' + d.id]);
+}
+
+// the whale's month: the grant compounds, the circle tightens, a new whim lands
+function whaleMonth(news) {
+  G.donors.filter(d => d.whale && !d.lapsing).forEach(d => {
+    d.grant = Math.round(d.grant * (1 + TUNE.whaleGrowth));
+    d.whaleMonths = (d.whaleMonths || 0) + 1;
+    if (d.whaleMonths % TUNE.whaleShrinkEvery === 0 && d.demand.maxOthers > 0) {
+      d.demand.maxOthers--;
+      news.push({ h: `${d.name.toUpperCase()} WOULD PREFER FEWER VOICES`, s: `They now tolerate at most ${d.demand.maxOthers} other funder${d.demand.maxOthers === 1 ? '' : 's'}. Their grant, meanwhile, is up to ${fmtMoney(d.grant)}/mo.` });
+    }
+    if (d.whaleMonths % 3 === 0) {
+      const w = pick(WHALE_WHIMS);
+      const tag = pick(TAGS);
+      d.whim = { type: w.type, pid: w.pid, tag: w.type === 'NOCROSS' ? null : tag, amt: w.amt,
+        text: w.text.replace('{TAG}', tag).replace('{SIDE}', d.lean > 0 ? 'left' : d.lean < 0 ? 'right' : 'partisan') };
+      news.push({ h: `${d.name.toUpperCase()} HAS A NEW REQUEST`, s: `They ${d.whim.text}. Unmet whims are strikes, and they only tolerate two.` });
+      logLine(`${d.name}'s new whim: ${d.whim.text}.`);
+    }
+  });
 }
 
 // donors who would be angered by committing to this side of this fight
@@ -803,6 +850,17 @@ function actDrop(id) {
   save(); render();
 }
 
+function weakestTag() {
+  return [...TAGS].sort((a, b) => G.scholars.filter(s => s.tag === a).length - G.scholars.filter(s => s.tag === b).length)[0];
+}
+
+function actProgFocus(tag) {
+  if (!TAGS.includes(tag)) return;
+  G.progFocus = tag;
+  logLine(`Junior Fellows Program refocused on ${TAG_NAMES[tag]}.`);
+  save(); render();
+}
+
 function actProgram(pid) {
   const p = PROGRAMS.find(x => x.id === pid);
   if (p.once) {
@@ -816,6 +874,7 @@ function actProgram(pid) {
     return;
   }
   G.programs[pid] = !G.programs[pid];
+  if (pid === 'fellows' && G.programs[pid] && !G.progFocus) G.progFocus = weakestTag();
   logLine(G.programs[pid] ? `Launched the ${p.name} (${fmtMoney(p.cost)}/mo).` : `Quietly shut down the ${p.name}.`);
   save(); render();
 }
@@ -910,13 +969,19 @@ function actCommit(fightIdx, sideIdx, amt) {
   amt = Math.min(amt, G.influence);
   if (amt <= 0) return flash('No influence to spend. Scholars make it monthly.');
   const angry = angeredBy(f, side);
-  if (angry.length) {
-    const names = angry.map(d => d.name).join(', ');
+  const whimAngry = whimAngeredBy(f, side).filter(d => !angry.includes(d));
+  if (angry.length || whimAngry.length) {
+    const names = [...angry, ...whimAngry].map(d => d.name).join(', ');
     if (!confirm(`Backing “${side.label}” will anger: ${names} (+1 strike each). Proceed?`)) return;
     angry.forEach(d => {
       d.strikes++;
       f.crossed[d.id] = true;
       logLine(`${d.name} is displeased by your position on ${f.title}. (${d.strikes}/${TUNE.strikeLimit} strikes)`);
+    });
+    whimAngry.forEach(d => {
+      d.strikes++;
+      f.crossed['whim:' + d.id] = true;
+      logLine(`${d.name}'s whim is offended by your position on ${f.title}. (${d.strikes}/${TUNE.strikeLimit} strikes)`);
     });
   }
   G.influence -= amt;
@@ -1242,6 +1307,9 @@ function monthPlayer(news) {
   });
   G.donors = G.donors.filter(d => !gone.includes(d));
 
+  // 4.6 the whales: compounding money, tightening circle, new whims
+  whaleMonth(news);
+
   // 4.7 fickle donors sometimes gut their own grant
   G.donors.filter(d => d.flaw === 'fickle' && !d.lapsing).forEach(d => {
     if (Math.random() < 0.15) {
@@ -1266,7 +1334,7 @@ function monthPlayer(news) {
   leaving.forEach(d => {
     news.push({ h: `${d.name.toUpperCase()} PULLS FUNDING`, s: `“We wish the institution well,” says statement that does not wish the institution well. ${fmtMoney(d.grant)}/mo, gone.` });
     logLine(`${d.name} walks. ${fmtMoney(d.grant)}/mo, gone.`);
-    bumpConf(TUNE.confWalk, `${d.name} walked`);
+    bumpConf(d.whale ? TUNE.whaleWalkConf : TUNE.confWalk, `${d.name} walked${d.whale ? ' (the whale)' : ''}`);
     rec().donorsLost++;
   });
   G.donors = G.donors.filter(d => d.strikes < TUNE.strikeLimit);
@@ -1317,17 +1385,30 @@ function monthPlayer(news) {
     logLine(`${v.name} quit over ${diva.name}. The diva's output remains excellent.`);
   });
 
-  // 6.53 junior fellows pipeline: every 6th active month, one becomes real
+  // 6.53 junior fellows pipeline: every few months a cohort resolves — usually a
+  // junior in the focus issue, sometimes nobody, occasionally a star or a stray
   if (G.programs.fellows) {
     G.progMonths = G.progMonths || {};
     G.progMonths.fellows = (G.progMonths.fellows || 0) + 1;
-    if (G.progMonths.fellows % 6 === 0) {
-      const jr = genScholar(true);
-      jr.salary = ri(10, 14); jr.out = ri(8, 12); jr.big = false; jr.diva = false;
-      jr.quirk = 'Was, until recently, named Tyler.';
-      G.scholars.push(jr);
-      news.push({ h: `JUNIOR FELLOW ${jr.name.toUpperCase()} PROMOTED TO ACTUAL SCHOLAR`, s: `${TAG_NAMES[jr.tag]}, ✦${jr.out}/mo, ${fmtMoney(jr.salary)}/mo. The program yields again.` });
-      logLine(`Junior Fellows Program graduates ${jr.name} (${TAG_NAMES[jr.tag]}).`);
+    if (G.progMonths.fellows % TUNE.fellowsEvery === 0) {
+      const focus = G.progFocus || weakestTag();
+      const roll = Math.random();
+      if (roll < 0.2) {
+        news.push({ h: 'JUNIOR FELLOWS COHORT PRODUCES NO ONE', s: `Four Tylers went to law school. The ${focus} pipeline runs dry this cycle; the program grinds on.` });
+        logLine(`Junior Fellows: the ${focus} cohort washed out.`);
+      } else {
+        const star = roll >= 0.85, stray = roll >= 0.75 && roll < 0.85;
+        const jr = genScholar(true);
+        jr.tag = stray ? pick(TAGS.filter(t => t !== focus)) : focus;
+        jr.lean = Math.sign(tank().align) || 0; jr.big = false; jr.diva = false;
+        jr.salary = star ? ri(14, 18) : ri(10, 14);
+        jr.out = star ? ri(15, 19) : ri(8, 12);
+        jr.quirk = star ? 'Was, until recently, an intern. Now terrifying.' : 'Was, until recently, named Tyler.';
+        G.scholars.push(jr);
+        news.push({ h: star ? `JUNIOR FELLOW ${jr.name.toUpperCase()} IS, IT TURNS OUT, BRILLIANT` : `JUNIOR FELLOW ${jr.name.toUpperCase()} PROMOTED TO ACTUAL SCHOLAR`,
+          s: `${TAG_NAMES[jr.tag]}${stray ? ' — not the focus, but talent is talent' : ''}: ✦${jr.out}/mo at ${fmtMoney(jr.salary)}/mo. Grown in-house.` });
+        logLine(`Junior Fellows graduates ${jr.name} (${TAG_NAMES[jr.tag]}${star ? ', a star' : ''}).`);
+      }
     }
   }
 
@@ -1883,7 +1964,10 @@ function renderPrograms() {
     const on = G.programs[p.id];
     const wanted = G.donors.some(d => d.demand.type === 'PROGRAM' && d.demand.pid === p.id);
     const fellowsNote = p.id === 'fellows' && on
-      ? ` · next fellow in ${6 - (((G.progMonths || {}).fellows || 0) % 6)} mo` : '';
+      ? ` · next cohort in ${TUNE.fellowsEvery - (((G.progMonths || {}).fellows || 0) % TUNE.fellowsEvery)} mo` : '';
+    const focus = p.id === 'fellows' ? (G.progFocus || weakestTag()) : null;
+    const nextFocus = focus ? TAGS[(TAGS.indexOf(focus) + 1) % TAGS.length] : null;
+    const focusLine = focus ? `<div class="pline">Sourcing focus: ${tagChip(focus)} <button class="btn tiny" data-act="progfocus" data-tag="${nextFocus}" title="Each cohort usually yields a junior ${focus} scholar; sometimes nobody, occasionally a star or a stray from another field">change ▸</button></div>` : '';
     const costLine = p.once
       ? `${fmtMoney(p.once)} once${p.cost ? ` + ${fmtMoney(p.cost)}/mo upkeep` : ''}${p.inf ? ` · ✦ +${p.inf}/mo` : ''}`
       : `${fmtMoney(p.cost)}/mo${p.inf ? ` · ✦ +${p.inf}/mo` : ' · produces nothing'}${fellowsNote}`;
@@ -1897,6 +1981,7 @@ function renderPrograms() {
         <div class="pcontent">
           <div class="pline"><b>${p.name}</b> ${on ? '<span class="chip on">RUNNING</span>' : ''} ${wanted ? '<span class="chip want" title="A current donor demands this">DONOR BAIT</span>' : ''}</div>
           <div class="pline dim">${costLine}</div>
+          ${focusLine}
           <div class="pline quirk">${p.blurb}</div>
           ${button}
         </div>
@@ -1908,6 +1993,7 @@ function donorPFChips(d) {
   let s = '';
   if (d.perk && DONOR_PERKS[d.perk]) s += ` <span class="chip want" title="${DONOR_PERKS[d.perk].tip}">${DONOR_PERKS[d.perk].label}</span>`;
   if (d.flaw && DONOR_FLAWS[d.flaw]) s += ` <span class="chip raid" title="${DONOR_FLAWS[d.flaw].tip}">${DONOR_FLAWS[d.flaw].label}</span>`;
+  if (d.whale) s += ` <span class="chip raid" title="${DONOR_FLAWS.whale.tip}">🐋 WHALE</span>`;
   return s;
 }
 
@@ -2120,6 +2206,7 @@ document.addEventListener('click', e => {
   else if (act === 'drop') actDrop(b.dataset.id);
   else if (act === 'prog') actProgram(b.dataset.id);
   else if (act === 'prospect') actProspect(b.dataset.kind);
+  else if (act === 'progfocus') actProgFocus(b.dataset.tag);
   else if (act === 'crisischoice') actCrisis(+b.dataset.idx);
   else if (act === 'testify') actTestify(+b.dataset.f);
   else if (act === 'returnsdone') { $('#returnsWin').classList.add('hidden'); showPaper(G.finalPaper || [], true); }
@@ -2152,7 +2239,7 @@ document.addEventListener('click', e => {
 // renders the server's view and forwards actions. See README for the flow.
 const NET = { active: false, code: null, pid: null, token: null, monthSeq: -1, paperSeq: 0, timer: null, ended: false, host: false, shownResult: false };
 const NET_DEFAULT_URL = 'https://think-tank-tycoon.timhwang.workers.dev';
-const NET_ACTS = new Set(['hire', 'fire', 'court', 'drop', 'prog', 'commit', 'prospect', 'renew', 'lapse', 'match', 'release', 'crisischoice', 'testify', 'serve', 'keep']);
+const NET_ACTS = new Set(['hire', 'fire', 'court', 'drop', 'prog', 'progfocus', 'commit', 'prospect', 'renew', 'lapse', 'match', 'release', 'crisischoice', 'testify', 'serve', 'keep']);
 
 function netUrl() { try { return localStorage.getItem('ttt-net-url') || NET_DEFAULT_URL; } catch (e) { return NET_DEFAULT_URL; } }
 function netSaveCreds() { try { localStorage.setItem('ttt-net', JSON.stringify({ code: NET.code, pid: NET.pid, token: NET.token })); } catch (e) {} }
@@ -2170,12 +2257,13 @@ async function netCall(path, body, method) {
   }
 }
 
-function netStopPolling() { if (NET.timer) { clearInterval(NET.timer); NET.timer = null; } }
+function netStopPolling() { if (NET.timer) { clearInterval(NET.timer); NET.timer = null; } if (NET.clock) { clearInterval(NET.clock); NET.clock = null; } }
 
 async function netCreate() {
   const name = ($('#netName').value || '').trim() || 'Host';
   const tankId = $('#netTank').value;
-  const r = await netCall('', { name, tankId });
+  const turnSeconds = +($('#netTurn') ? $('#netTurn').value : 120) || 120;
+  const r = await netCall('', { name, tankId, turnSeconds });
   if (r.error) return flash(r.error);
   NET.code = r.code; NET.pid = r.pid; NET.token = r.token; NET.host = true;
   netSaveCreds();
@@ -2234,10 +2322,30 @@ function netApplyView(v) {
     wait.classList.remove('hidden');
     $('#waitNames').textContent = waiting.length ? waiting.join(', ') : 'the server';
   } else wait.classList.add('hidden');
-  const chip = $('#netChip');
-  if (chip) chip.textContent = `CAMPAIGN ${NET.code}`;
+  // the shot clock: the month resolves at the deadline whether or not everyone ended
+  if (v.turnSeconds && v.turnStarted && v.phase === 'playing') {
+    const remaining = v.turnSeconds * 1000 - ((v.now || Date.now()) - v.turnStarted);
+    NET.deadline = Date.now() + Math.max(0, remaining);
+    NET.turnSeconds = v.turnSeconds;
+  } else NET.deadline = null;
+  netTickClock();
+  if (!NET.clock) NET.clock = setInterval(netTickClock, 1000);
   const btn = document.querySelector('[data-act="end"]');
   if (btn) { btn.disabled = NET.ended || !!G.over; btn.textContent = NET.ended ? 'WAITING…' : 'END MONTH ▶'; }
+}
+
+function netTickClock() {
+  const chip = $('#netChip');
+  if (!NET.active) { if (chip) chip.textContent = ''; return; }
+  let clock = '';
+  if (NET.deadline) {
+    const left = Math.max(0, Math.round((NET.deadline - Date.now()) / 1000));
+    clock = ` · ⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    const wc = $('#waitClock');
+    if (wc) wc.textContent = `The month resolves in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} regardless.`;
+    if (left === 0 && !NET.expiredPoll) { NET.expiredPoll = true; netPoll(); setTimeout(() => { NET.expiredPoll = false; netPoll(); }, 2500); }
+  }
+  if (chip) chip.textContent = `CAMPAIGN ${NET.code}${clock}`;
 }
 
 function netEnter(v) {
@@ -2268,7 +2376,7 @@ async function netPoll() {
 
 async function netAction(type, ds) {
   if (NET.ended) return flash('You already ended this month — waiting on the others.');
-  const args = { idx: ds.idx, id: ds.id, kind: ds.kind, f: ds.f, s: ds.s, amt: ds.amt };
+  const args = { idx: ds.idx, id: ds.id, kind: ds.kind, f: ds.f, s: ds.s, amt: ds.amt, tag: ds.tag };
   const v = await netCall(`/${NET.code}/action`, { type, args });
   if (v.error) flash(v.error);
   if (v.me) { netApplyView(v); render(); }
@@ -2288,7 +2396,8 @@ async function netLeave() {
   if (NET.code && NET.pid) netCall(`/${NET.code}/leave`, {});
   netStopPolling();
   netClearCreds();
-  Object.assign(NET, { active: false, code: null, pid: null, token: null, monthSeq: -1, paperSeq: 0, ended: false, host: false, shownResult: false });
+  Object.assign(NET, { active: false, code: null, pid: null, token: null, monthSeq: -1, paperSeq: 0, ended: false, host: false, shownResult: false, deadline: null });
+  const chip = $('#netChip'); if (chip) chip.textContent = '';
   G = null; W = null;
   $('#onlineForm').classList.remove('hidden');
   $('#lobby').classList.add('hidden');

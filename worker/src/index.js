@@ -2,7 +2,9 @@
 // One Durable Object per campaign room holds the shared world and every
 // player's institution, and runs the real game engine (bundled in engine.js)
 // to apply actions and resolve months once everyone has ended theirs.
-import { createCampaign, applyAction, canEnd, resolveMonth, viewFor } from './engine.js';
+import { createCampaign, applyAction, canEnd, resolveMonth, viewFor, autoCrisis } from './engine.js';
+
+const TURN_DEFAULT = 120, TURN_MIN = 30, TURN_MAX = 900;
 
 const ALLOWED_ORIGINS = ['https://timhwang.github.io', 'http://localhost:8769', 'http://127.0.0.1:8769'];
 
@@ -83,7 +85,8 @@ export class Campaign {
       if (this.meta) return reply({ error: 'Room exists' }, 409);
       const name = String(body.name || 'Host').slice(0, 24);
       const pid = 'p1', token = makeToken();
-      this.meta = { code, phase: 'lobby', created: Date.now(), hostPid: pid,
+      const turnSeconds = Math.max(TURN_MIN, Math.min(TURN_MAX, +body.turnSeconds || TURN_DEFAULT));
+      this.meta = { code, phase: 'lobby', created: Date.now(), hostPid: pid, turnSeconds, turnStarted: null,
         players: [{ pid, name, tankId: body.tankId, token, ended: false }] };
       await this.saveAll();
       return reply({ code, pid, token });
@@ -113,6 +116,13 @@ export class Campaign {
       this.world = createCampaign(this.meta.players.map(p => ({ pid: p.pid, name: p.name, tankId: p.tankId })));
       this.meta.phase = 'playing';
       this.meta.monthSeq = 0;
+      await this.startClock();
+      await this.saveAll();
+    }
+
+    // the shot clock ran out while nobody was looking: resolve on the next read
+    if (this.meta.phase === 'playing' && this.clockExpired()) {
+      await this.forceResolve();
       await this.saveAll();
     }
 
@@ -131,12 +141,7 @@ export class Campaign {
       if (why) return reply({ ...this.view(me), error: why });
       me.ended = true;
       const live = this.meta.players.filter(p => !this.world.players.find(w => w.pid === p.pid).over);
-      if (live.every(p => p.ended)) {
-        const over = resolveMonth(this.world);
-        this.meta.players.forEach(p => p.ended = false);
-        this.meta.monthSeq = (this.meta.monthSeq || 0) + 1;
-        if (over) this.meta.phase = 'over';
-      }
+      if (live.every(p => p.ended)) await this.advance();
       await this.saveAll();
       return reply(this.view(me));
     }
@@ -152,9 +157,49 @@ export class Campaign {
     return reply(this.view(me));
   }
 
+  // ---- the shot clock ----
+  clockExpired() {
+    return !!this.meta.turnStarted && Date.now() > this.meta.turnStarted + this.meta.turnSeconds * 1000 + 2000;
+  }
+
+  async startClock() {
+    this.meta.turnStarted = Date.now();
+    await this.state.storage.setAlarm(this.meta.turnStarted + this.meta.turnSeconds * 1000 + 1500);
+  }
+
+  // resolve the month: everyone still open is ended for them (crises take the free exit)
+  async advance() {
+    const over = resolveMonth(this.world);
+    this.meta.players.forEach(p => p.ended = false);
+    this.meta.monthSeq = (this.meta.monthSeq || 0) + 1;
+    if (over) { this.meta.phase = 'over'; this.meta.turnStarted = null; await this.state.storage.deleteAlarm(); }
+    else await this.startClock();
+  }
+
+  async forceResolve() {
+    if (!this.world || this.meta.phase !== 'playing') return;
+    for (const p of this.meta.players) {
+      const P = this.world.players.find(w => w.pid === p.pid);
+      if (!P || P.over || p.ended) continue;
+      if (P.crisis) autoCrisis(this.world, p.pid);
+      p.ended = true;
+      p.timedOut = (p.timedOut || 0) + 1;
+    }
+    await this.advance();
+  }
+
+  async alarm() {
+    await this.load();
+    if (!this.meta || this.meta.phase !== 'playing') return;
+    if (!this.clockExpired()) { await this.state.storage.setAlarm(this.meta.turnStarted + this.meta.turnSeconds * 1000 + 1500); return; }
+    await this.forceResolve();
+    await this.saveAll();
+  }
+
   view(me) {
     const base = {
       code: this.meta.code, phase: this.meta.phase, hostPid: this.meta.hostPid, monthSeq: this.meta.monthSeq || 0,
+      turnSeconds: this.meta.turnSeconds, turnStarted: this.meta.turnStarted, now: Date.now(),
       players: this.meta.players.map(p => ({ pid: p.pid, name: p.name, tankId: p.tankId, ended: p.ended })),
     };
     if (this.meta.phase === 'lobby' || !this.world) return base;
