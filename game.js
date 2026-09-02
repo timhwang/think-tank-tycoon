@@ -677,15 +677,24 @@ const CRISIS_FX = {
   ],
 };
 
+// crisis price tags grow with you: a comfortable shop pays comfortable money
+function crisisCost(ch) {
+  return {
+    cash: ch.cash ? Math.max(ch.cash, Math.round(G.cash * TUNE.crisisCashPct)) : 0,
+    inf: ch.inf ? Math.max(ch.inf, Math.round(production() * TUNE.crisisInfPct)) : 0,
+  };
+}
+
 function actCrisis(idx) {
   const c = G.crisis;
   if (!c) return;
   const def = CRISES.find(x => x.id === c.id);
   const ch = def.choices[idx];
   if (!ch) return;
-  if ((ch.cash || 0) > G.cash || (ch.inf || 0) > G.influence) return flash('You can\'t afford that option right now.');
-  G.cash -= ch.cash || 0;
-  G.influence -= ch.inf || 0;
+  const cost = crisisCost(ch);
+  if (cost.cash > G.cash || cost.inf > G.influence) return flash('You can\'t afford that option right now.');
+  G.cash -= cost.cash;
+  G.influence -= cost.inf;
   const note = CRISIS_FX[c.id][idx](c);
   logLine(`CRISIS RESOLVED — ${crisisSub(def.title)}: “${crisisSub(ch.label)}.” ${note}`);
   G.crisis = null;
@@ -700,8 +709,9 @@ function renderCrisis() {
   $('#crisisBody').innerHTML = `
     <div class="crisisbody">${crisisSub(def.body)}</div>
     ${def.choices.map((ch, i) => {
-      const cost = [ch.cash ? fmtMoney(ch.cash) : '', ch.inf ? `✦${ch.inf}` : ''].filter(Boolean).join(' + ');
-      const short = (ch.cash || 0) > G.cash || (ch.inf || 0) > G.influence;
+      const cc = crisisCost(ch);
+      const cost = [cc.cash ? fmtMoney(cc.cash) : '', cc.inf ? `✦${cc.inf}` : ''].filter(Boolean).join(' + ');
+      const short = cc.cash > G.cash || cc.inf > G.influence;
       return `<div class="crisischoice">
         <button class="btn" data-act="crisischoice" data-idx="${i}" ${short ? 'disabled' : ''}>${crisisSub(ch.label)}${cost ? ` (${cost})` : ''}</button>
         <span class="dim">${crisisSub(ch.hint)}</span>
@@ -711,7 +721,14 @@ function renderCrisis() {
 }
 
 // ---------- rival AI ----------
+function playerLeadsBoard() {
+  const rows = standings();
+  return rows[0].you && rows[0].v > 0 && (!rows[1] || rows[0].v > rows[1].v);
+}
+
 function rivalCommits() {
+  const hot = playerLeadsBoard();
+  const drift = 1 + TUNE.rivalDriftPct * G.month;
   G.rivals.forEach(r => {
     const targets = [];
     G.fights.forEach(f => {
@@ -732,12 +749,18 @@ function rivalCommits() {
       if (sideIdx >= 0) {
         // everyone piles in as the vote nears — last-month sniping meets a wall
         const closing = f.monthsLeft <= 1 ? TUNE.rivalCloserMult : f.monthsLeft === 2 ? 1.5 : 1;
-        targets.push({ f, sideIdx, w: (r.tags.includes(f.tag) ? 2 : 1) * closing });
+        // and the town gangs up on a frontrunner: extra weight against sides
+        // the leader currently tops
+        const opp = f.sides[1 - sideIdx];
+        const oppTopRival = Math.max(0, ...Object.values(opp.rivals || {}));
+        const counter = hot && opp.yours > 0 && opp.yours >= oppTopRival ? TUNE.counterBidMult : 1;
+        targets.push({ f, sideIdx, w: (r.tags.includes(f.tag) ? 2 : 1) * closing * counter });
       }
     });
     if (!targets.length) return;
     const seasonal = G.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
-    const budget = Math.round(r.budget * seasonal * (0.75 + Math.random() * 0.5));
+    const heat = hot ? TUNE.frontrunnerMult : 1;
+    const budget = Math.round(r.budget * drift * seasonal * heat * (0.75 + Math.random() * 0.5));
     const wSum = targets.reduce((a, t) => a + t.w, 0);
     targets.forEach(t => {
       const amt = Math.floor(budget * t.w / wSum);
@@ -996,6 +1019,13 @@ function resolveFight(f, news) {
     // morale: a contested loss deflates the matching bench; a repeat loss
     // while they're already moping sends some packing
     const bench = G.scholars.filter(s => s.tag === f.tag);
+    if (!bench.length && G.scholars.length) {
+      // you picked a fight in a field you know nothing about, and lost:
+      // the whole building is embarrassed
+      G.scholars.forEach(s => s.mope = Math.max(s.mope || 0, TUNE.moraleMonths));
+      news.push({ h: `AMATEUR HOUR AT ${tank().short.toUpperCase()}`, s: `You contested a ${f.tag} fight with no ${f.tag} scholars on staff — and lost. The entire roster is demoralized (−${Math.round((1 - TUNE.moraleMult) * 100)}% output, ${TUNE.moraleMonths} months).` });
+      logLine(`No-bench ${f.tag} loss: the WHOLE roster is demoralized. Stay in your lane, or staff up before wandering.`);
+    }
     const quitters = [];
     bench.forEach(s => {
       if (s.mope > 0 && Math.random() < TUNE.moraleQuitChance) quitters.push(s);
@@ -1274,7 +1304,7 @@ function renderMyDonors() {
 // shown on fight cards when your bench amplifies commits there
 function expertiseChip(tag) {
   const n = G.scholars.filter(s => s.tag === tag).length;
-  if (!n) return '';
+  if (!n) return ` <span class="chip nobench" title="No ${tag} scholars on staff: no commit bonus here — and losing a contested ${tag} fight demoralizes your ENTIRE roster (−${Math.round((1 - TUNE.moraleMult) * 100)}% for ${TUNE.moraleMonths} months).">⚠ no bench</span>`;
   const pct = Math.round((expertiseMult(tag) - 1) * 100);
   const wr = G.programs.warroom ? ` The War Room adds ${Math.round(TUNE.warroomBonus * 100)} points of that.` : '';
   return ` <span class="chip on" title="Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).${wr}">★ +${pct}%</span>`;
@@ -1327,7 +1357,7 @@ function renderReport() {
     const budget = row.you ? `+${production()}` : `~${Math.round(G.rivals.find(r => r.short === row.short).budget * seasonal)}`;
     return `<tr class="${row.you ? 'you' : ''}">
       <td class="rank">${i + 1}</td>
-      <td>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}${row.you ? ' ★' : ''}</td>
+      <td>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}${row.you ? (i === 0 && row.v > 0 ? ' ★ <span title="You lead the board: the whole town is spending harder and counter-bidding the sides you top.">🔥</span>' : ' ★') : ''}</td>
       <td>${leanChip(row.align)}</td>
       <td class="amt">${row.v}</td>
       <td class="amt dim">✦${budget}</td>

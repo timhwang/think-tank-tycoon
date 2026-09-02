@@ -43,6 +43,9 @@ const TUNE = {
   crisisChance: 0.16,    // monthly odds a crisis lands (never two at once)
   electionSeasonStart: 16, // month index when election season begins (6 months out)
   electionSeasonMult: 1.5, // rival budgets scale by this during election season
+  rivalDriftPct: 0.012,  // rival budgets compound this much per month (they grow too)
+  frontrunnerMult: 1.3,  // rival spending scales by this while YOU lead the board
+  counterBidMult: 1.6,   // extra rival weight against sides the frontrunner leads
   courtCostMult: 1.5,    // global scaler on donor courting costs
   scholarOutMult: 1.08,  // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
@@ -62,6 +65,8 @@ const TUNE = {
   moraleMult: 0.75,      // demoralized scholars produce at this rate
   moraleMonths: 2,       // ...for this many months after a contested loss in their field
   moraleQuitChance: 0.25,// odds a demoralized scholar quits when their field loses AGAIN
+  crisisCashPct: 0.18,   // crisis cash options cost at least this share of treasury
+  crisisInfPct: 0.8,     // crisis influence options cost at least this share of monthly production
   poachChance: 0.12,     // monthly odds a rival makes a run at one of your scholars
   poachRivalGain: 3,     // rival budget gained when your scholar defects to them
   renewCostMult: 0.5,    // renewing an expiring donor costs this x fresh courting

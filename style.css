@@ -181,6 +181,7 @@ body {
 .chip.gold { background: #e8d47a; border-color: var(--gold); font-weight: bold; }
 .chip.raid { background: #d4a0a0; border-color: #7a2020; font-weight: bold; }
 .chip.diva { background: #e8b06a; border-color: #a04a00; font-weight: bold; }
+.chip.nobench { background: #bdb3a4; border-color: #7a2020; color: #5a1414; }
 
 .tag { display: inline-block; font-size: 9px; font-weight: bold; color: #fff; padding: 0 4px; border: 1px solid #0006; }
 .tag-TAX { background: #8a6d00; }

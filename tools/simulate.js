@@ -195,8 +195,12 @@ function botShrewd() {
       const eff = Math.max(topOther + Math.ceil(buffer / 2) - s.yours,
                            Math.ceil(oddsRatio * (opp.total + buffer)) - s.total, 0);
       const raw = Math.ceil(eff / expertiseMult(f.tag)) || 1;
-      // prefer sides we already back (sunk position) and closer resolutions
-      plans.push({ fi, si, raw: s.yours > 0 ? Math.ceil(raw * 0.8) : raw, actual: raw });
+      // prefer sides we already back; avoid no-bench fights (a loss there
+      // demoralizes the whole roster now)
+      const bench = G.scholars.some(x => x.tag === f.tag);
+      let key = s.yours > 0 ? Math.ceil(raw * 0.8) : raw;
+      if (!bench) key = Math.ceil(key * 1.6);
+      plans.push({ fi, si, raw: key, actual: raw });
     });
   });
   plans.sort((a, b) => a.raw - b.raw);
@@ -210,14 +214,14 @@ function botShrewd() {
 
 function resolveCrisisBot(strategy) {
   const def = CRISES.find(x => x.id === G.crisis.id);
-  const affordable = def.choices.map((ch, i) => ({ ch, i }))
-    .filter(x => (x.ch.cash || 0) <= G.cash && (x.ch.inf || 0) <= G.influence);
-  const free = affordable.filter(x => !(x.ch.cash || x.ch.inf));
+  const affordable = def.choices.map((ch, i) => ({ ch, i, cost: crisisCost(ch) }))
+    .filter(x => x.cost.cash <= G.cash && x.cost.inf <= G.influence);
+  const free = affordable.filter(x => !(x.cost.cash || x.cost.inf));
   let choice;
   if (strategy === 'shrewd') {
     // pay to protect the machine when flush; otherwise take the free hit
-    const paid = affordable.filter(x => (x.ch.cash || x.ch.inf))
-      .filter(x => (!x.ch.cash || G.cash > 400) && (!x.ch.inf || G.influence > 70));
+    const paid = affordable.filter(x => (x.cost.cash || x.cost.inf))
+      .filter(x => (!x.cost.cash || G.cash > 400) && (!x.cost.inf || G.influence > 70));
     choice = paid[paid.length - 1] || free[0] || affordable[0];
   } else {
     choice = free[0] || affordable[0];

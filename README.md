@@ -31,7 +31,8 @@ STAFF ──produce──▶ INFLUENCE ──spent on──▶ POLICY FIGHTS ─
 - **Renewals.** When a grant cycle ends you get one month to renew at half courting cost — on stricter terms (tougher demand, one strike ends it) — or let the money lapse. Long-term **programs** (a house journal, a war room, junior fellows, an endowed chair, buying your own annex) trade heavy cost for compounding advantages over the 22 months.
 - **The race.** Every resolved fight awards one victory to the winning side's single top contributor (ties go to you). The HQ leaderboard tracks all seven institutions live; at month 22 the election ends the game and ranks everyone. The final six months are an announced **ELECTION SEASON** — rival spending runs 50% hotter to the wire. The core tension: influence spent on victories is leakage from the scholars→donors engine — glory and growth compete for the same points.
 - **Crises.** Roughly every six months the Bugle prints an EXTRA — a scandal, a funder feud, a shutdown that freezes the Hill, a surprise recess — and you must pick your poison before the next month can begin. Every option costs something different; every crisis has a free exit that hurts. Both markets carry genuine bad apples: dud scholars (grand résumé, feeble numbers), hidden-dud ops (senior prices, 1-scholar coverage), and CHAOTIC ops (3 capacity on paper, 20%/mo they deliver nothing) — no warning chips on the hidden ones; the stats are the tell, and a bad deal is still knowingly hireable when an immediate need justifies it. Prospecting past junk is exactly what the escalating sweep fees are for.
-- **Morale.** Lose a fight you contested and its issue's scholars are demoralized (−25% output for 2 months); lose that issue again while they're down and some leave for greener pastures. A win in their field restores them instantly.
+- **Morale.** Lose a fight you contested and its issue's scholars are demoralized (−25% output for 2 months); lose that issue again while they're down and some leave for greener pastures. A win in their field restores them instantly. Contest a fight where you employ **no matching scholars** (⚠ no bench on the card) and lose, and the **entire roster** is demoralized — wander outside your lanes at your peril.
+- **The town hates a winner.** Rival budgets drift upward all game, crisis price tags scale with your treasury and production, and whenever you lead the leaderboard (🔥) every rival spends ~30% harder and throws extra weight against the sides you top. Sandbagging at #2 until late is a legitimate strategy.
 - **Losing.** Two consecutive months in the red and the institution folds before the election. The treadmill is real: every December payroll rises 9%, donor grants sunset on 10–20 month cycles, and scholars quit after two straight months without ops support.
 
 ## Balance
@@ -41,11 +42,12 @@ Tuned by Monte Carlo (`node tools/simulate.js [runs]`), which stubs the DOM, loa
 | strategy | wins the election | notes |
 |---|---|---|
 | passive (never acts) | **0%** | crises and renewals go unanswered; the institution hollows out |
-| naive (random-ish moves) | **~12%** | mostly on Easy tanks — chaos occasionally crowns a fool |
-| shrewd (builds positions, buys odds, answers every offer) | **~67%** | 85–88% Easy, 68–86% Medium, 61% Hard, 13% Expert |
+| naive (random-ish moves) | **~3%** | chaos rarely crowns a fool anymore |
+| shrewd (builds positions, buys odds, answers every offer) | **~45%** | 60–64% Easy, 42–64% Medium, 36% Hard, 5% Expert |
 
-Probabilistic resolutions put a hard ceiling on certainty — even perfect play loses rolls — so the disciplined
-win rate sits a few points below the deterministic era by design.
+This is deliberately a hard game: probabilistic resolutions cap certainty, crises charge what you can
+afford, no-bench losses hit the whole roster, and the frontrunner-heat mechanic means the better you're
+doing, the harder the town pushes back. Ease it via `frontrunnerMult`, `rivalDriftPct`, or `crisisCashPct`.
 
 The levers live in `TUNE` (`rivalBudgetMult`, `fightCashMult`, `grantMult`, `courtCostMult`, `scholarOutMult`, `annualRaisePct`, `grantTermMin/Max`, `electionMonth`). Rerun the harness after touching any; `TUNE_PATCH='{"rivalBudgetMult":0.7}' node tools/simulate.js` tests a patch without editing files. The win rate is steeply sensitive to `rivalBudgetMult` (0.7 → 88%, 0.9 → 14%), so tune in small steps.
 
