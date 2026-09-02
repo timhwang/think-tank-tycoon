@@ -36,6 +36,54 @@ const iconImg = (name, size) => name
   ? `<img class="icon${size ? ' ' + size : ''}" src="icons/${name}.png" alt="" onerror="this.remove()">`
   : '';
 
+// ---------- audio flavor (synthesized, no files; muted via topbar) ----------
+let audioCtx = null;
+let muted = false;
+try { muted = localStorage.getItem('ttt-muted') === '1'; } catch (e) {}
+
+function sfx(kind) {
+  if (muted || typeof AudioContext === 'undefined') return;
+  try {
+    audioCtx = audioCtx || new AudioContext();
+    const t = audioCtx.currentTime;
+    const beep = (f, dur, type = 'square', gain = 0.07, at = 0) => {
+      const o = audioCtx.createOscillator(), gn = audioCtx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t + at);
+      gn.gain.setValueAtTime(gain, t + at);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      o.connect(gn).connect(audioCtx.destination);
+      o.start(t + at); o.stop(t + at + dur + 0.02);
+    };
+    const rustle = (dur, gain = 0.05) => {
+      const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const src = audioCtx.createBufferSource(), gn = audioCtx.createGain();
+      src.buffer = buf; gn.gain.value = gain;
+      src.connect(gn).connect(audioCtx.destination); src.start(t);
+    };
+    switch (kind) {
+      case 'click': beep(880, 0.04, 'square', 0.04); break;
+      case 'hire': beep(523, 0.07); beep(659, 0.1, 'square', 0.07, 0.08); break;
+      case 'court': beep(660, 0.06); beep(880, 0.06, 'square', 0.07, 0.07); beep(1320, 0.14, 'square', 0.07, 0.14); break;
+      case 'commit': beep(440, 0.06, 'triangle', 0.07); break;
+      case 'paper': rustle(0.3); break;
+      case 'roll': for (let i = 0; i < 14; i++) beep(180 + i * 18, 0.025, 'square', 0.04, 0.1 + i * 0.09); break;
+      case 'crisis': beep(110, 0.6, 'sawtooth', 0.06); beep(104, 0.6, 'sawtooth', 0.04, 0.04); break;
+      case 'season': beep(330, 0.14); beep(330, 0.14, 'square', 0.07, 0.18); beep(494, 0.4, 'square', 0.07, 0.36); break;
+      case 'win': [523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, 0.3, 'square', 0.07, i * 0.13)); break;
+      case 'lose': [392, 370, 349, 330].forEach((f, i) => beep(f, 0.35, 'sawtooth', 0.05, i * 0.28)); break;
+    }
+  } catch (e) {}
+}
+
+function setMuted(v) {
+  muted = v;
+  try { localStorage.setItem('ttt-muted', v ? '1' : '0'); } catch (e) {}
+  const b = $('#muteBtn');
+  if (b) { b.textContent = muted ? '🔇' : '🔊'; b.title = muted ? 'Sound off — click to unmute' : 'Sound on — click to mute'; }
+}
+
 // ---------- state ----------
 let G = null;
 let uid = 1;
@@ -152,6 +200,8 @@ function mkDonorInstance(defId) {
   if (d.perk === 'anchor') inst.term = undefined; // never sunsets
   return inst;
 }
+
+function drawFightInto() { const n = G.fights.length; drawFight(); return G.fights.length > n; }
 
 function drawFight() {
   if (!G.fightDeck.length) {
@@ -286,6 +336,20 @@ function monthlyGrants() {
   return g;
 }
 
+// ---------- the calendar ----------
+function calendarOf(m) { return CALENDAR[m] || null; }
+
+function drawMarqueeFight(news) {
+  if (!drawFightInto()) return;
+  const f = G.fights[G.fights.length - 1];
+  f.marquee = true;
+  f.title = 'SOTU: ' + f.title;
+  f.reward = { cash: (f.reward.cash || 0) * 2, inf: (f.reward.inf || 0) * 2, special: f.reward.special || null };
+  f.monthsLeft = 2;
+  news.push({ h: 'STATE OF THE UNION SETS THE AGENDA', s: `“${f.title.replace('SOTU: ', '')}” is the marquee fight of the year — double rewards, and every institution in town wants the credit. Two months to the vote.` });
+  logLine(`SOTU marquee fight: ${f.title} (double rewards).`);
+}
+
 // ---------- donor confidence ----------
 function bumpConf(delta, why) {
   if (G.confidence === undefined) G.confidence = TUNE.confStart;
@@ -415,7 +479,8 @@ function courtCost(d) {
   const devdir = Math.pow(0.85, specCount('devdir'));
   const band = confBand().id;
   const mood = band === 'confident' ? 0.95 : (band === 'spooked' || band === 'exodus') ? 1.25 : 1;
-  return Math.ceil(d.cost * TUNE.courtCostMult * connector * devdir * mood * fitMult(d.lean, 'donor'));
+  const recess = calendarOf(G.month) === 'august' ? 0.8 : 1; // gala season: everyone's at the beach, and buyable
+  return Math.ceil(d.cost * TUNE.courtCostMult * connector * devdir * mood * recess * fitMult(d.lean, 'donor'));
 }
 
 function renewCost(d) {
@@ -730,11 +795,12 @@ const CRISIS_WHEN = {
 };
 
 function drawCrisis(news) {
-  let pool = CRISES.filter(c => !G.usedCrises.includes(c.id) && CRISIS_WHEN[c.id]());
-  if (!pool.length) { G.usedCrises = []; pool = CRISES.filter(c => CRISIS_WHEN[c.id]()); }
+  let pool = CRISES.filter(c => !c.scripted && !G.usedCrises.includes(c.id) && CRISIS_WHEN[c.id]());
+  if (!pool.length) { G.usedCrises = []; pool = CRISES.filter(c => !c.scripted && CRISIS_WHEN[c.id]()); }
   if (!pool.length) return;
   const def = pick(pool);
   G.usedCrises.push(def.id);
+  sfx('crisis');
   const topSch = [...G.scholars].sort((x, y) => y.out - x.out)[0];
   const donorA = pick(G.donors.filter(d => d.lean > 0 && !d.lapsing)) || pick(G.donors.filter(d => !d.lapsing));
   const donorB = pick(G.donors.filter(d => d.lean < 0 && !d.lapsing));
@@ -763,6 +829,15 @@ function drawCrisis(news) {
   G.crisis = c;
   news.push({ h: `BUGLE EXTRA: ${crisisSub(def.title)}`, s: 'A decision is required before next month can begin.' });
   logLine(`CRISIS: ${crisisSub(def.title)} — decide before the next END MONTH.`);
+}
+
+function forceCrisis(id, news) {
+  const def = CRISES.find(c => c.id === id);
+  if (!def) return;
+  G.crisis = { id, t: { rival: pick(G.rivals).short }, n: { RIVAL: pick(G.rivals).short } };
+  news.push({ h: `BUGLE EXTRA: ${def.title}`, s: 'A decision is required before next month can begin.' });
+  logLine(`CRISIS: ${def.title} — decide before the next END MONTH.`);
+  sfx('crisis');
 }
 
 function crisisSub(text) {
@@ -826,6 +901,15 @@ const CRISIS_FX = {
   center: [
     c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) { d.grant += 30; d.term = (d.term || 18) + 6; } return `The ${c.n.DONOR} Center opens. The plaque is enormous; the grant grows ${fmtMoney(30)}/mo.`; },
     c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) d.strikes++; return `${c.n.DONOR} takes offense.`; },
+  ],
+  endorse: [
+    () => { G.influence += 40; const sign = Math.sign(tank().align);
+      const angry = sign ? G.donors.filter(d => d.lean * sign < 0 && !d.lapsing) : shuffle(activeDonors()).slice(0, 2);
+      angry.forEach(d => d.strikes++);
+      return `Your name is on the letter. ✦40 of relevance; ${angry.length} donor${angry.length === 1 ? '' : 's'} across the aisle took a strike.`; },
+    () => { G.influence += 25; const d = pick(activeDonors()); if (d) d.strikes++;
+      return `You backed the insurgent: ✦25, and ${d ? d.name : 'a donor'} is nervous about it.`; },
+    () => { bumpConf(4, 'stayed above the primary'); return 'You stayed above it. The base approves; the campaigns forget you exist.'; },
   ],
   union: [
     () => { G.ops.forEach(o => o.salary += 1); return 'The union is recognized. Every ops salary rises $1k/mo.'; },
@@ -910,7 +994,8 @@ function rivalCommits() {
         const opp = f.sides[1 - sideIdx];
         const oppTopRival = Math.max(0, ...Object.values(opp.rivals || {}));
         const counter = hot && opp.yours > 0 && opp.yours >= oppTopRival ? TUNE.counterBidMult : 1;
-        targets.push({ f, sideIdx, w: (r.tags.includes(f.tag) ? 2 : 1) * closing * counter });
+        const marquee = f.marquee ? 1.5 : 1;
+        targets.push({ f, sideIdx, w: (r.tags.includes(f.tag) ? 2 : 1) * closing * counter * marquee });
       }
     });
     if (!targets.length) return;
@@ -1091,7 +1176,26 @@ function endMonth() {
     G.negStreak = 0;
   }
 
-  // 8. refresh markets
+  // 7.5 the leaderboard has a story: lead changes make the paper
+  {
+    const top = standings()[0];
+    const leader = top.v > 0 ? top.short : null;
+    if (leader && leader !== G.leaderShort) {
+      if (top.you) news.push({ h: `${tank().short.toUpperCase()} TAKES THE LEAD`, s: `${top.v} victories banked. Enjoy it: the whole town now spends harder against the favorite.` });
+      else news.push({ h: `${leader.toUpperCase()} SEIZES THE LEAD`, s: `${top.v} victories banked. Their press release uses the word “momentum” four times.` });
+      logLine(`Leaderboard: ${leader} now leads with ${top.v}.`);
+    }
+    G.leaderShort = leader;
+  }
+
+  // 7.6 rivals do rival things
+  if (Math.random() < 0.35) {
+    const r = pick(G.rivals), mv = pick(RIVAL_MOVES);
+    news.push({ h: mv.h.replace('{RIVAL}', r.short.toUpperCase()), s: mv.s.replace('{RIVAL}', r.short) });
+  }
+
+  // 8. refresh markets (August recess: the Hill draws no new fights)
+  const nextEvent = calendarOf(G.month + 1);
   if (G.hireMarket.length) G.hireMarket.shift();
   while (G.hireMarket.length < TUNE.hireSlots) drawHire();
   if (Math.random() < 0.4 && G.donorMarket.length) {
@@ -1099,7 +1203,12 @@ function endMonth() {
     G.donorDeck.unshift(gone.id);
   }
   while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
-  while (G.fights.length < TUNE.fightSlots) drawFight();
+  if (nextEvent === 'august') {
+    news.push({ h: 'AUGUST RECESS: THE TOWN EMPTIES', s: 'No new fights reach the board this month. Everyone who matters is at a beach house with a donor — courting runs 20% cheaper.' });
+    logLine('August recess: no new fights; courting −20% this month.');
+  } else {
+    while (G.fights.length < TUNE.fightSlots) drawFight();
+  }
 
   // 8.4 chaotic ops roll their attendance for the coming month
   rollChaos();
@@ -1120,7 +1229,16 @@ function endMonth() {
   if (G.month === TUNE.electionSeasonStart) {
     news.unshift({ h: 'ELECTION SEASON BEGINS — SIX MONTHS TO THE VOTE', s: `Every institution in town opens its war chest: rival influence spending runs ${Math.round((TUNE.electionSeasonMult - 1) * 100)}% hotter from here to Election Night. Fights get louder, credit gets pricier, and the leaderboard is watching. Plan accordingly.`, big: true });
     logLine('ELECTION SEASON: rival spending +50% until the vote.');
+    sfx('season');
   }
+  // the calendar turns
+  const evt = calendarOf(G.month);
+  if (evt === 'sotu') drawMarqueeFight(news);
+  if (evt === 'offyear') {
+    const rows = standings().slice(0, 3).map((r, i) => `${i + 1}. ${r.short} — ${r.v}`).join('  ·  ');
+    news.push({ h: 'ONE YEAR OUT: THE STANDINGS', s: `Off-year elections come and go; the town checks the only scoreboard it cares about. ${rows}.` });
+  }
+  if (evt === 'primaries' && !G.crisis) forceCrisis('endorse', news);
   save(); render();
   if (news.length) showPaper(news);
 }
@@ -1233,6 +1351,7 @@ function electionDay(news) {
   const rank = rows.findIndex(r => r.you) + 1;
   const win = rank === 1 && rows[0].v > 0;
   G.electionResult = { win, rank, victories: G.stats.won };
+  sfx(win ? 'win' : 'lose');
   const list = rows.map((r, i) => `${i + 1}. ${r.short} — ${r.v}`).join('   ·   ');
   const items = [
     win
@@ -1248,6 +1367,7 @@ function electionDay(news) {
 
 function gameOver(news) {
   G.over = true;
+  sfx('lose');
   save();
   render();
   const s = G.stats;
@@ -1282,6 +1402,8 @@ function showPaper(items, isGameOver) {
   $('#paperBtn').textContent = isGameOver ? 'Start Over' : 'Continue';
   $('#paperBtn').dataset.act = isGameOver ? 'restart' : 'closepaper';
   $('#paper').classList.remove('hidden');
+  sfx('paper');
+  if (items.some(i => i.meter)) sfx('roll');
   // sweep each needle to its rolled number after the paper lands
   setTimeout(() => {
     document.querySelectorAll('#paper .needle').forEach(n => { n.style.left = n.dataset.roll + '%'; });
@@ -1351,9 +1473,11 @@ function render() {
   $('#tbTank').textContent = t.short.toUpperCase();
   const monthsLeft = TUNE.electionMonth - G.month;
   const inSeason = G.month >= TUNE.electionSeasonStart && monthsLeft > 0;
+  const cal = CALENDAR_LABEL[calendarOf(G.month)] ? ` · ${CALENDAR_LABEL[calendarOf(G.month)]}` : '';
   $('#tbDate').textContent = monthsLeft <= 0 ? 'ELECTION NIGHT'
-    : inSeason ? `${dateStr(G.month)} · ⚡ ELECTION SEASON · ${monthsLeft} mo`
-    : `${dateStr(G.month)} · ${monthsLeft} mo to election`;
+    : inSeason ? `${dateStr(G.month)}${cal} · ⚡ ELECTION SEASON · ${monthsLeft} mo`
+    : `${dateStr(G.month)}${cal} · ${monthsLeft} mo to election`;
+  setMuted(muted);
   $('#tbDate').className = inSeason ? 'tbval season' : 'tbval';
   $('#tbCash').innerHTML = `${fmtMoney(G.cash)} <span class="dim">(${fmtSigned(net)}/mo)</span>`;
   $('#tbCash').className = G.cash < 0 ? 'tbval bad' : 'tbval';
@@ -1646,6 +1770,8 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const act = b.dataset.act;
+  sfx(act === 'hire' ? 'hire' : act === 'court' || act === 'renew' ? 'court' : act === 'commit' ? 'commit' : 'click');
+  if (act === 'mute') { setMuted(!muted); return; }
   if (act === 'pick') newGame(b.dataset.id);
   else if (act === 'continue') { if (load()) { showScreen('game'); render(); } }
   else if (act === 'end') endMonth();

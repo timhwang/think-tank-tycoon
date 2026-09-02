@@ -36,7 +36,7 @@ const sandbox = {
   alert() {},
   confirm() { return true; },
   console,
-  setTimeout: () => {}, clearTimeout: () => {},
+  setTimeout: () => {}, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
   Math, JSON, Object, Array, Number, String, Boolean, Set, Map, Date, RegExp, parseInt, parseFloat, isNaN,
 };
 sandbox.globalThis = sandbox;

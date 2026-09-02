@@ -591,12 +591,45 @@ const CRISES = [
       { label:'Build the Center', cash:120, hint:'Their grant rises $30k/mo and the cycle extends 6 months' },
       { label:'Decline politely', hint:'{DONOR} takes a strike’s worth of offense' },
     ] },
+  { id:'endorse', title:'PRIMARY SEASON: A CAMPAIGN WANTS YOUR NAME', scripted:true,
+    body:'It is March 2028 and a presidential campaign would like your institution on a letter. Another campaign has heard about the letter.',
+    choices: [
+      { label:'Endorse the frontrunner', hint:'+✦40 of relevance; donors across the aisle from you take a strike' },
+      { label:'Endorse the insurgent', hint:'+✦25, and one nervous donor takes a strike' },
+      { label:'Stay above it', hint:'Donor confidence +4. Nobody remembers who stayed above it' },
+    ] },
   { id:'union', title:'THE INTERNS UNIONIZE',
     body:'The interns have elected a steward, drafted demands, and — ominously — learned what everyone is paid.',
     choices: [
       { label:'Recognize the union', hint:'Every current ops salary +$1k/mo, permanently' },
       { label:'Fight it', inf:30, hint:'✦30 of goodwill burned, and one ops staffer quits' },
     ] },
+];
+
+// ------------------------------------------------------------
+// The calendar: real DC rhythms keyed by month index (0 = Jan 2027).
+//   sotu      — a marquee State of the Union fight lands (double rewards)
+//   august    — recess: no new fights drawn, courting −20% (gala season)
+//   offyear   — Nov 2027 standings snapshot
+//   primaries — Mar 2028: a campaign wants your endorsement (scripted crisis)
+// ------------------------------------------------------------
+const CALENDAR = { 1:'sotu', 7:'august', 10:'offyear', 13:'sotu', 14:'primaries', 19:'august' };
+const CALENDAR_LABEL = { sotu:'SOTU', august:'RECESS', primaries:'PRIMARIES' };
+
+// Rival institutions doing rival things (flavor; {RIVAL} substituted)
+const RIVAL_MOVES = [
+  { h:'{RIVAL} POACHES A BIG NAME', s:'The announcement calls it “a homecoming.” It is a raise.' },
+  { h:'{RIVAL} PUBLISHES 400-PAGE REPORT NOBODY REQUESTED', s:'The executive summary is eleven pages. The executive summary of the executive summary is forthcoming.' },
+  { h:'{RIVAL} GALA RAISES MILLIONS, EYEBROWS', s:'The ice sculpture was of the donor.' },
+  { h:'{RIVAL} FELLOW GOES VIRAL FOR THE WRONG REASONS', s:'The thread has been deleted. The screenshots have not.' },
+  { h:'{RIVAL} LAUNCHES PODCAST', s:'Episode one: “Why We Launched a Podcast.”' },
+  { h:'{RIVAL} REBRANDS; LOGO NOW A DIFFERENT SHADE OF NAVY', s:'Consultants describe the shade as “forward-leaning.”' },
+  { h:'{RIVAL} OPENS “CENTER FOR THE FUTURE OF THINGS”', s:'Staffed by two fellows and a very good intern.' },
+  { h:'{RIVAL} PRESIDENT TESTIFIES, MOSTLY ABOUT THE OTHER PANELIST', s:'Members thanked the witness for their candor and asked the other guy a question.' },
+  { h:'{RIVAL} ANNOUNCES STRATEGIC PLAN THROUGH 2040', s:'Page one is a mission statement. Page two is also a mission statement.' },
+  { h:'{RIVAL} HOSTS PANEL ON PANELS', s:'Q&A ran long. The question was a comment.' },
+  { h:'{RIVAL} DONOR DINNER ENDS IN “VIGOROUS EXCHANGE”', s:'A fork was raised. Not thrown — raised.' },
+  { h:'{RIVAL} INTERNS FORM SLACK CHANNEL, SEIZE MEANS OF SCHEDULING', s:'Leadership has been informed via calendar invite.' },
 ];
 
 // No-effect Bugle items for slow news months: wonk life plus the three
