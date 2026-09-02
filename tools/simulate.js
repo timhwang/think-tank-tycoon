@@ -185,7 +185,8 @@ function botShrewd() {
     f.sides.forEach((s, si) => {
       const opp = f.sides[1 - si];
       const topOther = Math.max(0, ...Object.values(s.rivals || {}));
-      const buffer = 6 + 8 * f.monthsLeft; // rivals will keep spending
+      // rivals surge into closing fights, so late bids need real margin
+      const buffer = f.monthsLeft <= 1 ? 32 : 24;
       const eff = Math.max(topOther + buffer - s.yours, opp.total + buffer - s.total, 0);
       const raw = Math.ceil(eff / expertiseMult(f.tag)) || 1;
       plans.push({ fi, si, raw });

@@ -534,7 +534,11 @@ function rivalCommits() {
         if (f.rivalPicks[r.short] === undefined) f.rivalPicks[r.short] = ri(0, 1);
         sideIdx = f.rivalPicks[r.short];
       }
-      if (sideIdx >= 0) targets.push({ f, sideIdx, w: r.tags.includes(f.tag) ? 2 : 1 });
+      if (sideIdx >= 0) {
+        // everyone piles in as the vote nears — last-month sniping meets a wall
+        const closing = f.monthsLeft <= 1 ? TUNE.rivalCloserMult : f.monthsLeft === 2 ? 1.5 : 1;
+        targets.push({ f, sideIdx, w: (r.tags.includes(f.tag) ? 2 : 1) * closing });
+      }
     });
     if (!targets.length) return;
     const budget = Math.round(r.budget * (0.75 + Math.random() * 0.5));
@@ -907,9 +911,19 @@ function render() {
 }
 
 function renderStaff(cap) {
+  // display groups scholars by specialty so bench depth is obvious;
+  // ops coverage itself still follows seniority (first hires keep support)
+  const entries = G.scholars.map((s, i) => ({ s, supported: i < cap }));
+  entries.sort((a, b) => TAGS.indexOf(a.s.tag) - TAGS.indexOf(b.s.tag));
   const scholars = [];
-  G.scholars.forEach((s, i) => {
-    const supported = i < cap;
+  let lastTag = null;
+  entries.forEach(({ s, supported }) => {
+    if (s.tag !== lastTag) {
+      lastTag = s.tag;
+      const es = entries.filter(e => e.s.tag === s.tag);
+      const bench = es.reduce((a, e) => a + (e.supported ? e.s.out : Math.floor(e.s.out * TUNE.unsupportedMult)), 0);
+      scholars.push(`<div class="taghead">${tagChip(s.tag)} <span class="dim">×${es.length} · ✦${bench}/mo · commits +${Math.round((expertiseMult(s.tag) - 1) * 100)}%</span></div>`);
+    }
     scholars.push(`
       <div class="person ${supported ? '' : 'unsup'}">
         ${iconImg(s.icon)}

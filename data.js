@@ -33,7 +33,8 @@ const TUNE = {
   grantTermMax: 20,      // ...to this many, then the donor departs amicably
   grantMult: 0.8,        // global scaler on donor grants (applied when courted)
   fightCashMult: 0.7,    // global scaler on fight cash rewards (applied at draw)
-  rivalBudgetMult: 0.82, // global scaler on rival influence budgets
+  rivalBudgetMult: 0.76, // global scaler on rival influence budgets
+  rivalCloserMult: 3,    // rivals weight fights in their final month this much harder
   courtCostMult: 1.5,    // global scaler on donor courting costs
   scholarOutMult: 1,     // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
