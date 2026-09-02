@@ -34,7 +34,7 @@ const TUNE = {
   grantTermMax: 20,      // ...to this many, then the donor departs amicably
   grantMult: 0.8,        // global scaler on donor grants (applied when courted)
   fightCashMult: 0.7,    // global scaler on fight cash rewards (applied at draw)
-  rivalBudgetMult: 0.72, // global scaler on rival influence budgets
+  rivalBudgetMult: 0.9,  // global scaler on rival influence budgets
   rivalFlat: 14,         // rival budget = (flat + base*slope) * mult...
   rivalSlope: 0.5,       // ...flat>0 compresses the spread between big and small tanks
   rivalCloserMult: 2.2,  // rivals weight fights in their final month this much harder
@@ -67,6 +67,20 @@ const TUNE = {
   moraleMult: 0.75,      // demoralized scholars produce at this rate
   moraleMonths: 2,       // ...for this many months after a contested loss in their field
   moraleQuitChance: 0.25,// odds a demoralized scholar quits when their field loses AGAIN
+  // donor confidence: one 0-100 gauge for the whole base; shocks move it,
+  // low bands bite back (see confidenceMonth in game.js)
+  confStart: 70,
+  confWalk: -15,         // a donor leaves over strikes
+  confDrop: -10,         // you part ways with a donor
+  confLapse: -8,         // a cycle ends unrenewed
+  confFire: -5,          // you fire a scholar
+  confRush: -6,          // each courtship beyond the first in a month
+  confOverCap: -2,       // per donor beyond stewardship capacity, monthly
+  confRenew: 6,          // a renewal
+  confWin: 3,            // a banked victory
+  confDrift: 3,          // monthly recovery toward confStart
+  stewardBase: 3,        // donors your shop can steward with no development staff
+  stewardPerDev: 2,      // extra per Development Director
   crisisCashPct: 0.18,   // crisis cash options cost at least this share of treasury
   crisisInfPct: 0.8,     // crisis influence options cost at least this share of monthly production
   poachChance: 0.12,     // monthly odds a rival makes a run at one of your scholars

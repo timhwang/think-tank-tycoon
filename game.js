@@ -212,6 +212,7 @@ function newGame(tankId) {
     rivals: buildRivals(tankId),
     log: [], negStreak: 0, over: false, monthCommits: {}, progMonths: {}, prospects: {},
     crisis: null, usedCrises: [], freeze: 0, v: 2,
+    confidence: TUNE.confStart, confLog: [], courtsThisMonth: 0,
     stats: { months: 0, won: 0, lost: 0, peakCash: t.cash },
   };
   PROGRAMS.forEach(p => G.programs[p.id] = false);
@@ -226,6 +227,9 @@ function newGame(tankId) {
   save();
   showScreen('game');
   render();
+  let seen = false;
+  try { seen = !!localStorage.getItem('ttt-tut-seen'); } catch (e) {}
+  if (!seen) startTutorial();
 }
 
 // ---------- derived numbers ----------
@@ -280,6 +284,73 @@ function monthlyGrants() {
   const matchers = G.donors.filter(d => d.perk === 'matching' && !d.lapsing).length;
   if (matchers) g += matchers * 4 * Math.max(0, activeDonors().length - 1);
   return g;
+}
+
+// ---------- donor confidence ----------
+function bumpConf(delta, why) {
+  if (G.confidence === undefined) G.confidence = TUNE.confStart;
+  const before = G.confidence;
+  G.confidence = Math.max(0, Math.min(100, G.confidence + delta));
+  const applied = G.confidence - before;
+  if (applied === 0) return;
+  G.confLog = G.confLog || [];
+  G.confLog.unshift({ m: G.month, d: applied, why });
+  if (G.confLog.length > 8) G.confLog.pop();
+}
+
+function confBand(v) {
+  const c = v === undefined ? (G.confidence === undefined ? TUNE.confStart : G.confidence) : v;
+  if (c >= 70) return { id: 'confident', label: 'Confident', cls: 'ok' };
+  if (c >= 40) return { id: 'watchful', label: 'Watchful', cls: '' };
+  if (c >= 20) return { id: 'spooked', label: 'Spooked', cls: 'warn' };
+  return { id: 'exodus', label: 'Exodus', cls: 'bad' };
+}
+
+function stewardCap() {
+  return TUNE.stewardBase + TUNE.stewardPerDev * specCount('devdir')
+       + G.ops.filter(o => o.trait && o.trait.id === 'grants').length;
+}
+
+function confLedgerText() {
+  const rows = (G.confLog || []).map(e => `${e.d > 0 ? '+' : ''}${e.d} ${e.why}`);
+  return rows.length ? 'Recent: ' + rows.join(' · ') : 'No recent movers.';
+}
+
+// the month-end pass: drift, stewardship bleed, and what a shaky base does to you
+function confidenceMonth(news) {
+  if (G.confidence === undefined) G.confidence = TUNE.confStart;
+  const before = confBand().id;
+  const over = activeDonors().length - stewardCap();
+  if (over > 0) bumpConf(TUNE.confOverCap * over, `${over} donor${over > 1 ? 's' : ''} beyond stewardship`);
+  if (G.confidence < TUNE.confStart) bumpConf(Math.min(TUNE.confDrift, TUNE.confStart - G.confidence), 'worries fading');
+  else if (G.confidence > TUNE.confStart) bumpConf(-1, 'settling');
+  const band = confBand();
+  const pool = activeDonors();
+  if (band.id === 'watchful' && pool.length && Math.random() < 0.10) {
+    const d = pick(pool); d.strikes++;
+    logLine(`Donor confidence is only ${band.label.toLowerCase()}: ${d.name} takes a nervous strike.`);
+  } else if (band.id === 'spooked' && pool.length && Math.random() < 0.25) {
+    const d = pick(pool); d.strikes++;
+    logLine(`Donors are spooked: ${d.name} takes a strike.`);
+  } else if (band.id === 'exodus' && pool.length) {
+    const d = pick(pool);
+    G.donors = G.donors.filter(x => x !== d);
+    G.donorDeck.unshift(d.id);
+    news.push({ h: `${d.name.toUpperCase()} JOINS THE EXODUS`, s: `Donor confidence has collapsed (${G.confidence}/100). Funders are leaving on principle, which is to say in a herd.` });
+    logLine(`EXODUS: ${d.name} leaves — donor confidence ${G.confidence}.`);
+  }
+  const after = confBand().id;
+  if (before !== after) {
+    const msgs = {
+      confident: 'The base is steady again. Development exhales.',
+      watchful: 'Funders have started comparing notes. Nothing dramatic — yet.',
+      spooked: 'Grant officers are “re-evaluating priorities.” Courting costs more; renewals cost double; strikes come easier.',
+      exodus: 'The herd has turned. One donor leaves every month until confidence recovers.',
+    };
+    news.push({ h: `DONOR BASE NOW “${confBand().label.toUpperCase()}”`, s: msgs[after] });
+    logLine(`Donor confidence band: ${before} → ${after} (${G.confidence}).`);
+  }
+  G.courtsThisMonth = 0;
 }
 
 // ---------- demands ----------
@@ -342,7 +413,14 @@ function hireBonus(h) {
 function courtCost(d) {
   const connector = G.ops.some(o => o.trait && o.trait.id === 'court') ? 0.9 : 1;
   const devdir = Math.pow(0.85, specCount('devdir'));
-  return Math.ceil(d.cost * TUNE.courtCostMult * connector * devdir * fitMult(d.lean, 'donor'));
+  const band = confBand().id;
+  const mood = band === 'confident' ? 0.95 : (band === 'spooked' || band === 'exodus') ? 1.25 : 1;
+  return Math.ceil(d.cost * TUNE.courtCostMult * connector * devdir * mood * fitMult(d.lean, 'donor'));
+}
+
+function renewCost(d) {
+  const band = confBand().id;
+  return Math.ceil(courtCost(d) * TUNE.renewCostMult * ((band === 'spooked' || band === 'exodus') ? 2 : 1));
 }
 
 // visible tip when the player's politics move a price: "▼ −50%", with the
@@ -457,9 +535,10 @@ function actFire(kind, id) {
     list.splice(i, 1);
     strands.forEach(d => d.strikes++);
     worried.forEach(d => d.strikes++);
+    bumpConf(TUNE.confFire, `fired ${p.name}`);
     logLine(`${p.name} let go. ${strands.length + worried.length} donor(s) unsettled.`);
   } else {
-    if (!confirm(`Let ${p.name} go? Severance ${fmtMoney(sev)}. (Ops are expendable — no one will mourn.)`)) return;
+    if (!confirm(`Let ${p.name} go? Severance ${fmtMoney(sev)}.`)) return;
     G.cash -= sev;
     list.splice(i, 1);
     logLine(`${p.name} has “left to pursue outside opportunities.” Severance ${fmtMoney(sev)}.`);
@@ -482,6 +561,8 @@ function actCourt(idx) {
   });
   G.donors.push(d);
   drawDonorToMarket();
+  G.courtsThisMonth = (G.courtsThisMonth || 0) + 1;
+  if (G.courtsThisMonth > 1) bumpConf(TUNE.confRush, `rushed courtship (${d.name})`);
   logLine(`${d.name} is now a funder (${fmtMoney(d.grant)}/mo). Demand: ${demandText(d)}.`);
   save(); render();
 }
@@ -498,6 +579,7 @@ function actDrop(id) {
     + (exposed.length ? ` Your ${tag} scholars will read the room and lose morale.` : ' The staff will notice the treasury tighten.');
   if (!confirm(msg)) return;
   G.donors.splice(i, 1);
+  bumpConf(TUNE.confDrop, `parted with ${d.name}`);
   if (exposed.length) exposed.forEach(s => s.mope = Math.max(s.mope || 0, TUNE.moraleMonths));
   else if (G.scholars.length && Math.random() < 0.5) pick(G.scholars).mope = TUNE.moraleMonths;
   logLine(`Parted ways with ${d.name}. ${exposed.length ? `${exposed.length} ${tag} scholar(s) demoralized.` : 'The staff noticed.'}`);
@@ -558,8 +640,9 @@ function actProspect(kind) {
 function actRenew(id) {
   const d = G.donors.find(x => x.id === id);
   if (!d || !d.lapsing) return;
-  const cost = Math.ceil(courtCost(d) * TUNE.renewCostMult);
+  const cost = renewCost(d);
   if (G.influence < cost) return flash(`Renewal takes ✦${cost}. You have ${G.influence}.`);
+  bumpConf(TUNE.confRenew, `renewed ${d.name}`);
   G.influence -= cost;
   d.lapsing = false;
   d.joined = G.month;
@@ -577,6 +660,7 @@ function actLapse(id) {
   if (!d || !d.lapsing) return;
   G.donors = G.donors.filter(x => x !== d);
   G.donorDeck.unshift(d.id);
+  bumpConf(TUNE.confLapse, `let ${d.name} lapse`);
   logLine(`Let ${d.name}'s grant lapse. The thank-you note was gracious and final.`);
   save(); render();
 }
@@ -880,12 +964,13 @@ function endMonth() {
   G.donors.forEach(d => {
     if (d.lapsing) {
       gone.push(d); // grace month passed unanswered
+      bumpConf(TUNE.confLapse, `${d.name} lapsed`);
       news.push({ h: `${d.name.toUpperCase()} MOVES ON`, s: `The renewal window closed. ${fmtMoney(d.grant)}/mo departs with a warm note and a colder mailing-list removal.` });
       logLine(`${d.name} lapsed — no renewal. ${fmtMoney(d.grant)}/mo gone.`);
       G.donorDeck.unshift(d.id);
     } else if (d.term !== undefined && G.month - d.joined >= d.term - 1) {
       d.lapsing = true;
-      news.push({ h: `${d.name.toUpperCase()} GRANT CYCLE ENDING`, s: `Renew within the month — on stricter terms, for ✦${Math.ceil(courtCost(d) * TUNE.renewCostMult)} — or the ${fmtMoney(d.grant)}/mo sunsets.` });
+      news.push({ h: `${d.name.toUpperCase()} GRANT CYCLE ENDING`, s: `Renew within the month — on stricter terms, for ✦${renewCost(d)} — or the ${fmtMoney(d.grant)}/mo sunsets.` });
       logLine(`${d.name}'s cycle is ending: renew (stricter terms) or let it lapse.`);
     }
   });
@@ -915,8 +1000,12 @@ function endMonth() {
   leaving.forEach(d => {
     news.push({ h: `${d.name.toUpperCase()} PULLS FUNDING`, s: `“We wish the institution well,” says statement that does not wish the institution well. ${fmtMoney(d.grant)}/mo, gone.` });
     logLine(`${d.name} walks. ${fmtMoney(d.grant)}/mo, gone.`);
+    bumpConf(TUNE.confWalk, `${d.name} walked`);
   });
   G.donors = G.donors.filter(d => d.strikes < TUNE.strikeLimit);
+
+  // 5.5 donor confidence: drift, stewardship, and a shaky base biting back
+  confidenceMonth(news);
 
   // 6. pay the bills
   const costs = monthlyCosts();
@@ -1059,6 +1148,7 @@ function resolveFight(f, news) {
   const playerBanks = winner.yours > 0 && winner.yours >= topAmt; // ties go to you
   if (playerBanks) {
     G.stats.won++;
+    bumpConf(TUNE.confWin, `banked ${f.title.split(':')[0].slice(0, 28)}`);
   } else if (topRival) {
     const r = G.rivals.find(x => x.short === topRival);
     if (r) r.victories = (r.victories || 0) + 1;
@@ -1210,6 +1300,7 @@ function load() {
       (G.donors || []).forEach(d => { if (d.term === undefined) d.term = 18; });
       (G.scholars || []).forEach(s => { if (s.strikes === undefined) s.strikes = 0; });
       (G.rivals || []).forEach(r => { if (r.victories === undefined) r.victories = 0; });
+      if (G.confidence === undefined) { G.confidence = TUNE.confStart; G.confLog = []; G.courtsThisMonth = 0; }
       if (!G.v || G.v < 2) { // rebase rival budgets onto the tuned scale
         const defs = TANKS.concat(NPC_TANKS);
         (G.rivals || []).forEach(r => {
@@ -1277,6 +1368,8 @@ function render() {
   renderStaff(cap);
   renderPrograms();
   renderMyDonors();
+  const hdr = $('#donorConfHdr');
+  if (hdr) { const c = G.confidence === undefined ? TUNE.confStart : G.confidence; const b = confBand(c); hdr.textContent = ` · CONFIDENCE ${c} (${b.label.toUpperCase()})`; hdr.title = confLedgerText(); }
   renderReport();
   renderBugle();
   renderCrisis();
@@ -1380,7 +1473,7 @@ function renderMyDonors() {
             const cap = d.renewals ? 1 : TUNE.strikeLimit;
             return `<div class="pline dim">${d.renewals ? '<span class="chip want" title="Renewed relationship: stricter terms, and a single strike ends it">RENEWED</span> ' : ''}Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, cap - d.strikes))}${d.strikes === cap - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>`;
           })()}
-          ${d.lapsing ? `<div class="pline poachline">⌛ <b>Cycle over.</b> Renew for ✦${Math.ceil(courtCost(d) * TUNE.renewCostMult)} on stricter terms${d.demand.type === 'ENGAGE' ? ` (wants ✦${d.demand.amt + 5}/mo)` : d.demand.type === 'ROSTER' ? ' (wants 2 scholars)' : ''} — one strike ends a renewed deal — or let it lapse:
+          ${d.lapsing ? `<div class="pline poachline">⌛ <b>Cycle over.</b> Renew for ✦${renewCost(d)} on stricter terms${d.demand.type === 'ENGAGE' ? ` (wants ✦${d.demand.amt + 5}/mo)` : d.demand.type === 'ROSTER' ? ' (wants 2 scholars)' : ''} — one strike ends a renewed deal — or let it lapse:
             <button class="btn tiny" data-act="renew" data-id="${d.id}">Renew</button>
             <button class="btn tiny" data-act="lapse" data-id="${d.id}">Let Lapse</button></div>`
           : `<button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>`}
@@ -1466,6 +1559,16 @@ function renderReport() {
       <tr><td>Programs</td><td class="amt">${fmtSigned(-prog)}</td></tr>
       <tr class="net"><td>Net</td><td class="amt ${net < 0 ? 'warn' : 'ok'}">${fmtSigned(net)}</td></tr>
     </table>
+    <div class="subdivider">DONOR CONFIDENCE</div>
+    ${(() => {
+      const c = G.confidence === undefined ? TUNE.confStart : G.confidence;
+      const b = confBand(c);
+      const over = activeDonors().length - stewardCap();
+      return `<div class="confrow" title="${confLedgerText()} — Confident ≥70: courting −5%. Watchful 40–69: 10%/mo a donor strikes. Spooked 20–39: 25%/mo strikes, courting +25%, renewals ×2. Exodus <20: a donor leaves every month.">
+        <div class="confbar"><div class="conffill ${b.id}" style="width:${c}%"></div></div>
+        <span class="${b.cls}"><b>${c}</b> · ${b.label}</span></div>
+      <div class="pline dim">Stewardship: ${activeDonors().length}/${stewardCap()} donors${over > 0 ? ` <span class="warn">— ${over} over capacity, confidence bleeds</span>` : ''}</div>`;
+    })()}
     <div class="subdivider">LEADERBOARD — POLICY VICTORIES</div>
     <table class="ledger lb">
       <tr class="lbhead"><td>#</td><td>TANK</td><td>LEAN</td><td class="amt">W</td><td class="amt">✦/mo</td></tr>
@@ -1564,7 +1667,59 @@ document.addEventListener('click', e => {
   }
   else if (act === 'help') $('#helpWin').classList.toggle('hidden');
   else if (act === 'progwin') $('#progWin').classList.toggle('hidden');
+  else if (act === 'tutorial') startTutorial();
+  else if (act === 'tutnext') { if (tutStep >= TUTORIAL.length - 1) endTutorial(); else { tutStep++; renderTutorial(); } }
+  else if (act === 'tutback') { if (tutStep > 0) { tutStep--; renderTutorial(); } }
+  else if (act === 'tutskip') endTutorial();
 });
+
+// ---------- tutorial (first game, and on demand) ----------
+const TUTORIAL = [
+  { sel: '.topbar', title: 'THE TOP BAR',
+    body: '<p>Your dashboard. <b>TREASURY</b> is cash and your net monthly flow. <b>INFLUENCE</b> (✦) is what scholars mint each month — and what you spend on fights and donors. <b>STAFF</b> shows how many scholars your ops can support.</p><p>The <b>DATE</b> counts down to Election Night, November 2028. <b>END MONTH ▶</b> advances the clock; everything resolves then. <b>?</b> reopens the rules.</p>' },
+  { sel: '.rowtop > .window:nth-child(1)', title: 'POLICY FIGHTS',
+    body: '<p>The arena. Four fights are live at any time. Commit ✦ to a side with <b>+5</b> / <b>+25</b>; the bar and percentages show <b>live win odds</b>. The ⚑ lines show who is backing each side and with how much.</p><p>When the ⏳ clock hits zero the wire rolls — and the <b>victory goes to the winning side\'s single top contributor</b>. ★ marks fights where your bench earns a bonus; <b>⚠ no bench</b> warns that a loss there demoralizes everyone.</p>' },
+  { sel: '.rowtop > .window:nth-child(2)', title: 'HIRING MARKET',
+    body: '<p>Candidates rotate monthly. <b>Scholars</b> mint ✦ — their tag is their expertise, their lean sets partisan pricing (the ▼/▲ tips show exactly how much). <b>Ops</b> either support scholars (capacity on the card) or are specialists with one function.</p><p>Read the numbers: some deals are bad on purpose. <b>PROSPECT</b> re-deals the market for a rising price.</p>' },
+  { sel: '.rowtop > .window:nth-child(3)', title: 'DONOR MARKET',
+    body: '<p>Court donors with ✦; they pay monthly grants on a cycle. Every donor has a <b>DEMAND</b> — a scholar on staff, a program running, monthly influence in their pet issue, or ideological purity. Unmet demands earn strikes; two strikes and they walk.</p><p>Perks and flaws are called out on the card. A few blue-chip patrons only appear once your existing base qualifies.</p>' },
+  { sel: '.rowbottom > .window:nth-child(1)', title: 'YOUR INSTITUTION',
+    body: '<p>Your roster: <b>SCHOLARS</b> grouped by specialty (when you are over capacity, the earliest hires keep ops coverage), <b>OPERATIONS</b>, and your <b>DONORS</b> with demands, strikes and cycle countdowns.</p><p>Renewal offers and rival poach bids appear on these cards — answer them before the month ends. <b>PROGRAMS</b> opens vanity programs and long-term investments.</p>' },
+  { sel: '.rowbottom > .window:nth-child(2)', title: 'HQ REPORT',
+    body: '<p>Your books and the race. The monthly <b>ledger</b>; <b>DONOR CONFIDENCE</b> — a shaky base throws strikes, so grow only as fast as your development staff can steward; and the <b>LEADERBOARD</b> — rank, lean, victories, monthly spend.</p><p>Bank the most victories by Election Night to win.</p>' },
+  { sel: '#bugleWin', title: 'THE BELTWAY BUGLE',
+    body: '<p>The paper of record. The ticker logs everything you do. At month\'s end the front page reports resolutions (with their rolls), departures, raises, and the occasional <b>EXTRA</b> — a crisis you must decide before play continues.</p><p>Six months out it announces Election Season. Then, one November night, it prints the verdict.</p>' },
+  { sel: null, title: 'THE ASSIGNMENT',
+    body: '<p><b>Scholars mint influence; influence wins fights and courts donors; donors fund scholars.</b> Every point spent on glory is a point not invested in the machine — and the town hates a winner.</p><p>Twenty-two months. Go.</p>' },
+];
+let tutStep = -1;
+
+function startTutorial() { tutStep = 0; renderTutorial(); }
+
+function endTutorial() {
+  tutStep = -1;
+  renderTutorial();
+  try { localStorage.setItem('ttt-tut-seen', '1'); } catch (e) {}
+}
+
+function renderTutorial() {
+  document.querySelectorAll('.tut-focus').forEach(e => e.classList.remove('tut-focus'));
+  const win = $('#tutorialWin');
+  if (tutStep < 0) { win.classList.add('hidden'); return; }
+  const st = TUTORIAL[tutStep];
+  if (st.sel) {
+    const el = document.querySelector(st.sel);
+    if (el && el.classList) {
+      el.classList.add('tut-focus');
+      if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+  $('#tutTitle').textContent = `${st.title} · ${tutStep + 1}/${TUTORIAL.length}`;
+  $('#tutBody').innerHTML = st.body;
+  $('#tutBack').disabled = tutStep === 0;
+  $('#tutNext').textContent = tutStep === TUTORIAL.length - 1 ? 'Start Playing ▶' : 'Next ▶';
+  win.classList.remove('hidden');
+}
 
 // ---------- instant tooltips ----------
 // native title tooltips need a ~1s motionless hover; replace them all with

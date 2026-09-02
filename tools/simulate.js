@@ -145,9 +145,11 @@ function botShrewd() {
     if (!ops.length) break;
     actHire(ops[0].i);
   }
-  // a real specialist desk when the machine can carry one
+  // a real specialist desk when the machine can carry one — development
+  // first once the donor base approaches what the shop can steward
   if (monthlyGrants() - monthlyCosts() > 40 && G.cash > 500) {
-    const want = G.scholars.length >= 4 && !G.ops.some(o => o.spec === 'editor') ? 'editor'
+    const want = activeDonors().length >= stewardCap() - 1 && specCount('devdir') < 2 ? 'devdir'
+               : G.scholars.length >= 4 && !G.ops.some(o => o.spec === 'editor') ? 'editor'
                : !G.ops.some(o => o.spec === 'comms') ? 'comms' : null;
     if (want) {
       const cand = affordableHires().find(x => x.h.spec === want);
@@ -176,7 +178,8 @@ function botShrewd() {
   const courtable = G.donorMarket.map((d, i) => ({ d, i }))
     .filter(x => courtCost(x.d) <= G.influence - 25)
     .sort((a, b) => donorScore(b.d) - donorScore(a.d));
-  if (courtable.length) actCourt(courtable[0].i);
+  // don't outgrow stewardship by more than one; a spooked base isn't worth courting into
+  if (courtable.length && activeDonors().length < stewardCap() + 1 && confBand().id !== 'spooked' && confBand().id !== 'exodus') actCourt(courtable[0].i);
   // grow the bench when finances allow (divas are someone else's problem)
   const net = monthlyGrants() - monthlyCosts();
   if (G.cash > 500 && net > 0 && G.scholars.length < supportCap()) {

@@ -307,6 +307,22 @@ body {
 
 .report { max-height: none; }
 
+/* ---------- donor confidence gauge ---------- */
+.confrow { display: flex; align-items: center; gap: 8px; margin: 3px 0; cursor: help; }
+.confbar {
+  flex: 1; height: 12px;
+  background: #a8a8a8;
+  border: 2px solid;
+  border-top-color: var(--win-dkr); border-left-color: var(--win-dkr);
+  border-right-color: var(--win-lt); border-bottom-color: var(--win-lt);
+}
+.conffill { height: 100%; }
+.conffill.confident { background: #3c8c3c; }
+.conffill.watchful { background: #c9a227; }
+.conffill.spooked { background: #c05a1e; }
+.conffill.exodus { background: #9b1414; }
+#donorConfHdr { font-size: 8px; color: #5a1414; }
+
 /* ---------- leaderboard ---------- */
 .lb .you td { font-weight: bold; background: #d8d4b8; }
 .lb .lbhead td { font-family: 'Silkscreen', Verdana, sans-serif; font-size: 8px; color: #333; border-bottom: 1px solid var(--win-dk); }
@@ -450,6 +466,19 @@ body {
   transition: left 1.4s cubic-bezier(.2, .85, .25, 1.15);
 }
 .rolltext { font-size: 10px; font-style: italic; margin-top: 3px; }
+
+/* ---------- tutorial ---------- */
+#tutorialWin {
+  position: fixed;
+  right: 14px;
+  top: 72px;
+  width: min(370px, 92vw);
+  z-index: 120;
+  box-shadow: 8px 8px 0 #00000088;
+}
+.tutbody p { margin: 0 0 8px 0; font-size: 12px; line-height: 1.5; }
+.tutbtns { display: flex; gap: 6px; justify-content: flex-end; padding: 0 6px 6px 6px; }
+.tut-focus { outline: 4px solid #ffd700; outline-offset: 2px; position: relative; z-index: 55; }
 
 /* ---------- crisis window ---------- */
 #crisisWin {

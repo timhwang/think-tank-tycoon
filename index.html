@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -59,6 +59,7 @@
     <div class="tbgroup"><span class="tblabel">STAFF</span><span class="tbval" id="tbStaff"></span></div>
     <span class="tbspacer"></span>
     <button class="btn" data-act="help">?</button>
+    <button class="btn" data-act="tutorial" title="Replay the guided tour of every panel">Tour</button>
     <button class="btn" data-act="newgame">New Game</button>
     <button class="btn big end" data-act="end">END MONTH ▶</button>
   </header>
@@ -88,7 +89,7 @@
         <div class="wbody shopgrid">
           <div class="shopcol"><div class="subdivider">SCHOLARS</div><div id="scholarsBody"></div></div>
           <div class="shopcol"><div class="subdivider">OPERATIONS</div><div id="opsBody"></div></div>
-          <div class="shopcol"><div class="subdivider">DONORS</div><div id="myDonorsBody"></div></div>
+          <div class="shopcol"><div class="subdivider">DONORS<span id="donorConfHdr"></span></div><div id="myDonorsBody"></div></div>
         </div>
       </div>
       <div class="window">
@@ -125,6 +126,17 @@
   <div class="wbody" id="programsBody"></div>
 </div>
 
+<!-- ================= TUTORIAL WINDOW ================= -->
+<div id="tutorialWin" class="window hidden">
+  <div class="titlebar">🎓 <span id="tutTitle"></span> <span class="widgets"><span data-act="tutskip" style="cursor:pointer" title="Skip the tour">✕</span></span></div>
+  <div class="wbody tutbody" id="tutBody"></div>
+  <div class="tutbtns">
+    <button class="btn tiny" id="tutBack" data-act="tutback">◀ Back</button>
+    <button class="btn tiny" data-act="tutskip">Skip Tour</button>
+    <button class="btn" id="tutNext" data-act="tutnext">Next ▶</button>
+  </div>
+</div>
+
 <!-- ================= CRISIS WINDOW ================= -->
 <div id="crisisWin" class="window hidden">
   <div class="titlebar crisisbar">☎ BUGLE EXTRA — <span id="crisisTitle"></span></div>
@@ -149,13 +161,14 @@
       <li><b>Election season:</b> The final six months are announced — rival spending runs 50% hotter until the vote. Rival budgets also drift upward all game, and whenever <b>you lead the leaderboard</b> the town gangs up: rivals spend harder and counter-bid the sides you're winning. The endgame is the hardest part, especially for the favorite.</li>
       <li><b>Payroll creep:</b> Every December, everyone gets a raise (+9%) — and rivals occasionally make a run at your best scholars: match the offer (permanent raise) or let them defect and strengthen that rival. Standing still is a slow way to lose.</li>
       <li><b>Programs:</b> Money sinks (gala, podcast, lobby). Mostly useless for policy — but certain donors won't fund you without them. That's the game.</li>
-      <li><b>Letting go:</b> Ops are expendable. But firing a <b>scholar</b> unsettles donors (worse if it strands a donor's demand), and parting with a <b>donor</b> demoralizes the scholars whose issue they funded. Cuts have consequences.</li>
+      <li><b>Letting go:</b> Ops can be let go without fallout. Firing a <b>scholar</b> unsettles donors (worse if it strands a donor's demand), and parting with a <b>donor</b> demoralizes the scholars whose issue they funded. Cuts have consequences.</li>
+      <li><b>Donor confidence:</b> One gauge for the whole base (HQ Report). Departures, firings, and courting faster than your development staff can steward all shake it; renewals and banked victories restore it, and worries fade slowly on their own. A Watchful base throws nervous strikes; a Spooked one charges more to court and double to renew; in Exodus a donor leaves every month. Development Directors raise how many donors you can steward.</li>
       <li><b>Losing:</b> End two consecutive months with a negative treasury and the institution folds before the election. Otherwise, Election Night ranks everyone by victories banked.</li>
     </ul>
   </div>
 </div>
 
-<script src="data.js?v=18"></script>
-<script src="game.js?v=18"></script>
+<script src="data.js?v=20"></script>
+<script src="game.js?v=20"></script>
 </body>
 </html>
