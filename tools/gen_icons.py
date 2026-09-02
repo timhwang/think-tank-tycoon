@@ -108,6 +108,12 @@ ICONS = {
     'program_podcast': 'a chrome studio microphone with plush headphones hanging on it',
     'program_lobby':   'a polished marble wall of blank engraved donor plaques with one spotlight',
 
+    'program_journal': 'a bound academic journal with a quill pen resting on the cover',
+    'program_warroom': 'a wall map covered in red string and pushpins',
+    'program_fellows': 'a row of identical eager young interns in matching gray suits',
+    'program_chair':   'an ornate leather professor armchair on a marble pedestal with a brass plaque',
+    'program_wing':    'a marble building annex under construction with wooden scaffolding',
+
     # ---- think tanks (7) ----
     'tank_hutchings':    'a marble neoclassical institute building with columns and ivy trim on a blue shield',
     'tank_legacy':       'a bald eagle perched on a stack of leather books on a red shield',
