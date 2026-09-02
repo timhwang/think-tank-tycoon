@@ -37,8 +37,11 @@ const TUNE = {
   courtCostMult: 1.5,    // global scaler on donor courting costs
   scholarOutMult: 1,     // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
-  prospectHireCost: 50,  // cash to sweep the hiring market and deal fresh cards
-  prospectDonorCost: 50, // cash to re-deal the donor market (a cultivation dinner)
+  prospectHireCost: 80,  // base cash to sweep the hiring market...
+  prospectHireInf: 10,   // ...plus influence (headhunters want intros too)
+  prospectDonorCost: 80, // base cash to re-deal the donor market...
+  prospectDonorInf: 15,  // ...plus influence (cultivation dinners run on favors)
+  prospectEscalate: 0.5, // each prior sweep of that market adds this x base
   divaChance: 0.08,      // odds a market scholar is a brilliant nightmare
   divaQuitChance: 0.12,  // monthly odds each diva drives a colleague out
   opsBoonChance: 0.28,   // odds an ops hire carries a bonus trait

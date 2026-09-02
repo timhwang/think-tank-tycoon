@@ -166,7 +166,7 @@ function newGame(tankId) {
     fightDeck: shuffle(FIGHTS.map(f => f.id)),
     donorDeck: shuffle(DONORS.map(d => d.id).filter(id => !t.donors.includes(id))),
     rivals: buildRivals(tankId),
-    log: [], negStreak: 0, over: false, monthCommits: {}, progMonths: {}, v: 2,
+    log: [], negStreak: 0, over: false, monthCommits: {}, progMonths: {}, prospects: {}, v: 2,
     stats: { months: 0, won: 0, lost: 0, peakCash: t.cash },
   };
   PROGRAMS.forEach(p => G.programs[p.id] = false);
@@ -414,20 +414,35 @@ function actProgram(pid) {
   save(); render();
 }
 
-// sweep a stale market and deal fresh cards
+// sweep a stale market and deal fresh cards — each sweep costs cash AND
+// influence, and gets pricier every time you do it (no fishing for the
+// perfect card)
+function prospectPrice(kind) {
+  const uses = (G.prospects || {})[kind] || 0;
+  const mult = 1 + TUNE.prospectEscalate * uses;
+  return kind === 'hire'
+    ? { cash: Math.ceil(TUNE.prospectHireCost * mult), inf: Math.ceil(TUNE.prospectHireInf * mult) }
+    : { cash: Math.ceil(TUNE.prospectDonorCost * mult), inf: Math.ceil(TUNE.prospectDonorInf * mult) };
+}
+
 function actProspect(kind) {
-  const cost = kind === 'hire' ? TUNE.prospectHireCost : TUNE.prospectDonorCost;
-  if (G.cash < cost) return flash(`Prospecting costs ${fmtMoney(cost)}. You don't have it.`);
-  G.cash -= cost;
+  const p = prospectPrice(kind);
+  if (G.cash < p.cash || G.influence < p.inf) {
+    return flash(`Prospecting the ${kind === 'hire' ? 'hiring' : 'donor'} market costs ${fmtMoney(p.cash)} + ✦${p.inf} right now. You're short.`);
+  }
+  G.cash -= p.cash;
+  G.influence -= p.inf;
+  G.prospects = G.prospects || {};
+  G.prospects[kind] = (G.prospects[kind] || 0) + 1;
   if (kind === 'hire') {
     G.hireMarket = [];
     while (G.hireMarket.length < TUNE.hireSlots) drawHire();
-    logLine(`Paid a headhunter ${fmtMoney(cost)} to sweep the hiring market.`);
+    logLine(`Paid a headhunter ${fmtMoney(p.cash)} + ✦${p.inf} in favors to sweep the hiring market. The next sweep will cost more.`);
   } else {
     G.donorMarket.forEach(d => G.donorDeck.unshift(d.id));
     G.donorMarket = [];
     while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
-    logLine(`Hosted a ${fmtMoney(cost)} cultivation dinner; a fresh crop of donors sniffs around.`);
+    logLine(`A ${fmtMoney(p.cash)} cultivation dinner (plus ✦${p.inf} of favors) turns over the donor market. The next one costs more.`);
   }
   save(); render();
 }
@@ -877,8 +892,9 @@ function render() {
   $('#tbStaff').textContent = `${G.scholars.length} scholars / ${cap} supported`;
 
   const ph = $('#prospectHireBtn'), pd = $('#prospectDonorBtn');
-  if (ph) { ph.textContent = `PROSPECT (${fmtMoney(TUNE.prospectHireCost)})`; ph.disabled = G.cash < TUNE.prospectHireCost; }
-  if (pd) { pd.textContent = `PROSPECT (${fmtMoney(TUNE.prospectDonorCost)})`; pd.disabled = G.cash < TUNE.prospectDonorCost; }
+  const pph = prospectPrice('hire'), ppd = prospectPrice('donor');
+  if (ph) { ph.textContent = `PROSPECT (${fmtMoney(pph.cash)} + ✦${pph.inf})`; ph.disabled = G.cash < pph.cash || G.influence < pph.inf; }
+  if (pd) { pd.textContent = `PROSPECT (${fmtMoney(ppd.cash)} + ✦${ppd.inf})`; pd.disabled = G.cash < ppd.cash || G.influence < ppd.inf; }
 
   renderFights();
   renderHireMarket();
