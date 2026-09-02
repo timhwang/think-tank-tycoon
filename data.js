@@ -34,7 +34,7 @@ const TUNE = {
   grantTermMax: 20,      // ...to this many, then the donor departs amicably
   grantMult: 0.8,        // global scaler on donor grants (applied when courted)
   fightCashMult: 0.7,    // global scaler on fight cash rewards (applied at draw)
-  rivalBudgetMult: 0.9,  // global scaler on rival influence budgets
+  rivalBudgetMult: 0.96, // global scaler on rival influence budgets
   rivalFlat: 14,         // rival budget = (flat + base*slope) * mult...
   rivalSlope: 0.5,       // ...flat>0 compresses the spread between big and small tanks
   rivalCloserMult: 2.2,  // rivals weight fights in their final month this much harder
@@ -81,6 +81,10 @@ const TUNE = {
   confDrift: 3,          // monthly recovery toward confStart
   stewardBase: 3,        // donors your shop can steward with no development staff
   stewardPerDev: 2,      // extra per Development Director
+  testifyBase: 0.5,      // testimony success odds before the scholar's output and quirks
+  tapChance: 0.03,       // monthly odds a scholar is tapped for government...
+  tapConnectedChance: 0.08, // ...higher for the well-connected quirks
+  allyBonus: 0.1,        // commit bonus per former scholar now in government (per tag, max 3)
   crisisCashPct: 0.18,   // crisis cash options cost at least this share of treasury
   crisisInfPct: 0.8,     // crisis influence options cost at least this share of monthly production
   poachChance: 0.12,     // monthly odds a rival makes a run at one of your scholars
@@ -461,6 +465,13 @@ const SCHOLAR_QUIRKS = [
 const OPS_ROLES = [
   'Logistics Coordinator','Events Coordinator','Comms Coordinator','Finance Manager',
   'Office Manager','Executive Assistant to the President','AV Guy (Indispensable)','Intern Wrangler',
+];
+
+// Government posts a tapped scholar might leave for ({TAG} substituted)
+const GOV_POSTS = [
+  'Deputy Undersecretary for {TAG}', 'Senior Advisor to the President on {TAG}',
+  'Assistant Secretary (Acting) for {TAG}', 'Chief Economist of an agency nobody can name',
+  'Special Envoy for {TAG}, Whatever That Means',
 ];
 
 // résumé-inflation lines for the market's bad apples — the numbers are the tell

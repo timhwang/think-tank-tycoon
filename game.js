@@ -263,6 +263,7 @@ function newGame(tankId) {
     log: [], negStreak: 0, over: false, monthCommits: {}, progMonths: {}, prospects: {},
     crisis: null, usedCrises: [], freeze: 0, v: 2,
     confidence: TUNE.confStart, confLog: [], courtsThisMonth: 0,
+    allies: {}, pendingNews: [],
     stats: { months: 0, won: 0, lost: 0, peakCash: t.cash },
   };
   PROGRAMS.forEach(p => G.programs[p.id] = false);
@@ -334,6 +335,113 @@ function monthlyGrants() {
   const matchers = G.donors.filter(d => d.perk === 'matching' && !d.lapsing).length;
   if (matchers) g += matchers * 4 * Math.max(0, activeDonors().length - 1);
   return g;
+}
+
+// ---------- scholars who do things ----------
+// a few quirks are mechanical; the rest stay flavor
+const QUIRK_FX = {
+  'Cable hit every Thursday. Hair and makeup at 4.': 'cable',
+  'The book tour never technically ended.': 'book',
+  'Currently feuding with a podcast.': 'feud',
+  'Substack has 14 paying subscribers, all donors.': 'substack',
+  'Has testified 44 times; remembers 3.': 'veteran',
+  'Was “in the room.” Won’t say which room.': 'connected',
+  'Shook three presidents’ hands in one buffet line.': 'connected',
+};
+const quirkId = s => QUIRK_FX[s.quirk] || null;
+
+function scholarMonth(news) {
+  G.scholars.forEach(s => {
+    const q = quirkId(s);
+    if (q === 'cable' && Math.random() < 0.2) {
+      if (Math.random() < 0.7) { G.influence += 5; logLine(`${s.name} nails the Thursday hit: +✦5.`); }
+      else {
+        const d = pick(activeDonors());
+        if (d) d.strikes++;
+        news.push({ h: `${s.name.toUpperCase()} SAYS THE QUIET PART ON CABLE`, s: `The clip is everywhere. ${d ? d.name + ' has questions.' : 'Mercifully, nobody who funds you was watching.'}` });
+      }
+    } else if (q === 'book' && Math.random() < 0.15) {
+      G.influence += 4; logLine(`${s.name}'s book tour stops somewhere new: +✦4.`);
+    } else if (q === 'feud' && Math.random() < 0.12) {
+      const r = pick(G.rivals);
+      if (Math.random() < 0.5) { G.influence += 4; news.push({ h: `${s.name.toUpperCase()} WINS PODCAST FEUD, FOR NOW`, s: `A ${r.short} fellow's rebuttal episode ran ninety minutes and convinced no one. +✦4.` }); }
+      else { G.influence = Math.max(0, G.influence - 4); news.push({ h: `${s.name.toUpperCase()} LOSES ROUND OF PODCAST FEUD`, s: `The ${r.short} podcast had receipts. −✦4, and the feud continues.` }); }
+    } else if (q === 'substack' && Math.random() < 0.1) {
+      bumpConf(2, `${s.name}'s newsletter`);
+    }
+  });
+}
+
+// the revolving door: government taps a scholar; you decide whether to let them go
+function revolvingDoor(news) {
+  if (G.scholars.length < 2 || G.scholars.some(s => s.tapped || s.poach)) return;
+  const cands = G.scholars.filter(s => Math.random() < (quirkId(s) === 'connected' ? TUNE.tapConnectedChance : TUNE.tapChance));
+  if (!cands.length) return;
+  const s = pick(cands);
+  s.tapped = { deadline: G.month + 1, post: pick(GOV_POSTS).replace('{TAG}', TAG_NAMES[s.tag]) };
+  news.push({ h: `${s.name.toUpperCase()} TAPPED FOR GOVERNMENT`, s: `The administration wants them as ${s.tapped.post}. Let them serve and you gain an ally on ${s.tag}; talk them out of it and you keep the scholar. Decide from the staff panel this month.` });
+  logLine(`${s.name} tapped for ${s.tapped.post} — serve (ally) or keep (✦25)?`);
+}
+
+function serveInGovernment(s, news) {
+  G.scholars = G.scholars.filter(x => x !== s);
+  G.allies = G.allies || {};
+  G.allies[s.tag] = Math.min(3, (G.allies[s.tag] || 0) + 1);
+  news.push({ h: `${s.name.toUpperCase()} SWORN IN AS ${s.tapped.post.toUpperCase()}`, s: `A framed photo goes up in the lobby. Your ${s.tag} commits now carry +${Math.round(TUNE.allyBonus * 100)}% per ally in government (${G.allies[s.tag]} on ${s.tag}).` });
+  logLine(`${s.name} joins the administration — ally on ${s.tag} (${G.allies[s.tag]}).`);
+}
+
+function actServe(id) {
+  const s = G.scholars.find(x => x.id === id);
+  if (!s || !s.tapped) return;
+  G.pendingNews = G.pendingNews || [];
+  serveInGovernment(s, G.pendingNews);
+  save(); render();
+}
+
+function actKeepScholar(id) {
+  const s = G.scholars.find(x => x.id === id);
+  if (!s || !s.tapped) return;
+  if (G.influence < 25) return flash('Talking them out of it takes ✦25.');
+  G.influence -= 25;
+  logLine(`${s.name} turns down ${s.tapped.post}. It cost ✦25 and a very good lunch.`);
+  delete s.tapped;
+  save(); render();
+}
+
+// testimony: in a fight's final month, your best matching scholar takes the stand
+function testimonyReady(f) {
+  return f.monthsLeft <= 1 && !f.testimony && f.sides.some(s => s.yours > 0) && G.scholars.some(s => s.tag === f.tag);
+}
+
+function bestWitness(tag) {
+  return [...G.scholars].filter(s => s.tag === tag).sort((a, b) => b.out - a.out)[0];
+}
+
+function actTestify(fi) {
+  const f = G.fights[fi];
+  if (!f || !testimonyReady(f)) return;
+  const s = bestWitness(f.tag);
+  const side = f.sides[0].yours >= f.sides[1].yours ? f.sides[0] : f.sides[1];
+  const p = Math.max(0.35, Math.min(0.9, TUNE.testifyBase + s.out / 100 + (quirkId(s) === 'veteran' ? 0.15 : 0)));
+  const ok = Math.random() < p;
+  G.pendingNews = G.pendingNews || [];
+  if (ok) {
+    const eff = Math.round(s.out * 1.5);
+    side.total += eff; side.yours += eff;
+    G.monthCommits = G.monthCommits || {}; G.monthCommits[f.tag] = (G.monthCommits[f.tag] || 0) + eff;
+    f.testimony = { who: s.name, ok: true, eff };
+    G.pendingNews.push({ h: `${s.name.toUpperCase()} COMMANDS THE HEARING ROOM`, s: `Members quoted the testimony back to each other. +${eff} to “${side.label}” on ${f.title}.` });
+    logLine(`📣 ${s.name} testified on ${f.title}: +${eff} (${Math.round(p * 100)}% odds).`);
+  } else {
+    const cut = Math.round(side.yours * 0.25);
+    side.yours -= cut; side.total -= cut;
+    s.mope = Math.max(s.mope || 0, 1);
+    f.testimony = { who: s.name, ok: false, eff: -cut };
+    G.pendingNews.push({ h: `${s.name.toUpperCase()} FLUBS TESTIMONY`, s: `A senator asked a question; the answer was a different question. −${cut} to “${side.label}” on ${f.title}, and a bruised ego.` });
+    logLine(`📣 ${s.name} flubbed on ${f.title}: −${cut} (${Math.round(p * 100)}% odds).`);
+  }
+  save(); render();
 }
 
 // ---------- the calendar ----------
@@ -519,7 +627,8 @@ function expertiseMult(tag) {
   return 1 + Math.min(TUNE.expertiseCap, TUNE.expertisePerScholar * n)
        + (G.programs.warroom ? TUNE.warroomBonus : 0)
        + 0.05 * specCount('govrel')
-       + 0.08 * G.donors.filter(d => d.perk === 'megaphone' && !d.lapsing).length;
+       + 0.08 * G.donors.filter(d => d.perk === 'megaphone' && !d.lapsing).length
+       + TUNE.allyBonus * ((G.allies || {})[tag] || 0);
 }
 
 // resolution odds: sharpened contest curve — a 2:1 influence lead wins ~85%,
@@ -1019,7 +1128,8 @@ function rivalCommits() {
 function endMonth() {
   if (G.over) return;
   if (G.crisis) { flash('The Bugle EXTRA is waiting — resolve the crisis first.'); renderCrisis(); return; }
-  const news = [];
+  const news = [...(G.pendingNews || [])];
+  G.pendingNews = [];
   G.stats.months++;
 
   // 1. rivals pile on
@@ -1095,6 +1205,11 @@ function endMonth() {
   // 6. pay the bills
   const costs = monthlyCosts();
   G.cash -= costs;
+
+  // 6.4 scholars do things: quirks with teeth, and the revolving door
+  scholarMonth(news);
+  G.scholars.filter(s => s.tapped && s.tapped.deadline <= G.month).forEach(s => serveInGovernment(s, news));
+  revolvingDoor(news);
 
   // 6.45 moping fades a notch each month
   G.scholars.forEach(s => { if (s.mope > 0) s.mope--; });
@@ -1526,6 +1641,9 @@ function renderStaff(cap) {
           </div>
           <div class="pline dim">✦ ${supported ? s.out : Math.floor(s.out * TUNE.unsupportedMult)}/mo · ${fmtMoney(s.salary)}/mo</div>
           <div class="pline quirk">${s.quirk}</div>
+          ${s.tapped ? `<div class="pline poachline">🏛 <b>Tapped for government</b> — ${s.tapped.post}. Decide this month:
+            <button class="btn tiny" data-act="serve" data-id="${s.id}" title="They leave; you gain a permanent ally in government on ${s.tag} (+10% on your ${s.tag} commits)">Let Them Serve</button>
+            <button class="btn tiny" data-act="keep" data-id="${s.id}" title="Costs ✦25">Talk Them Out of It (✦25)</button></div>` : ''}
           ${s.poach ? `<div class="pline poachline">⚠ <b>${s.poach.by}</b> is offering <b>${fmtMoney(s.poach.salary)}/mo</b> (now ${fmtMoney(s.salary)}). Decide before month's end:
             <button class="btn tiny" data-act="match" data-id="${s.id}">Match</button>
             <button class="btn tiny" data-act="release" data-id="${s.id}">Let Them Walk</button></div>`
@@ -1640,6 +1758,8 @@ function renderFights() {
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
           <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
+          ${testimonyReady(f) ? `<div class="pline"><button class="btn tiny" data-act="testify" data-f="${fi}" title="Your best ${f.tag} scholar takes the stand for the side you back: success adds 1.5× their output; a flub costs a quarter of your stake and their pride.">📣 Testify: ${bestWitness(f.tag).name}</button></div>` : ''}
+          ${f.testimony ? `<div class="pline ${f.testimony.ok ? 'ok' : 'warn'}">📣 ${f.testimony.who} ${f.testimony.ok ? 'commanded the hearing room' : 'flubbed the hearing'}: ${f.testimony.eff > 0 ? '+' : ''}${f.testimony.eff}</div>` : ''}
           <div class="tug" title="Odds if it resolved right now. Influence ratios are sharpened (a 2:1 lead wins ~85%) — but the wire decides, and upsets happen."><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
@@ -1686,6 +1806,7 @@ function renderReport() {
       <tr><td>Programs</td><td class="amt">${fmtSigned(-prog)}</td></tr>
       <tr class="net"><td>Net</td><td class="amt ${net < 0 ? 'warn' : 'ok'}">${fmtSigned(net)}</td></tr>
     </table>
+    ${Object.keys(G.allies || {}).length ? `<div class="subdivider">ALLIES IN GOVERNMENT</div><div class="pline">${Object.entries(G.allies).map(([t, n]) => `${tagChip(t)} ×${n} <span class="dim">(+${n * Math.round(TUNE.allyBonus * 100)}% commits)</span>`).join(' ')}</div>` : ''}
     <div class="subdivider">DONOR CONFIDENCE</div>
     ${(() => {
       const c = G.confidence === undefined ? TUNE.confStart : G.confidence;
@@ -1782,6 +1903,9 @@ document.addEventListener('click', e => {
   else if (act === 'prog') actProgram(b.dataset.id);
   else if (act === 'prospect') actProspect(b.dataset.kind);
   else if (act === 'crisischoice') actCrisis(+b.dataset.idx);
+  else if (act === 'testify') actTestify(+b.dataset.f);
+  else if (act === 'serve') actServe(+b.dataset.id);
+  else if (act === 'keep') actKeepScholar(+b.dataset.id);
   else if (act === 'renew') actRenew(b.dataset.id);
   else if (act === 'lapse') actLapse(b.dataset.id);
   else if (act === 'match') actMatch(+b.dataset.id);

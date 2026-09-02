@@ -128,6 +128,9 @@ function botDecent() {
 }
 
 function botShrewd() {
+  // the stand and the revolving door
+  G.fights.forEach((f, fi) => { if (testimonyReady(f)) actTestify(fi); });
+  G.scholars.filter(s => s.tapped).forEach(s => { if (s.out >= 14 && G.influence > 60) actKeepScholar(s.id); else actServe(s.id); });
   // answer standing offers first: poach bids and expiring donors
   G.scholars.filter(s => s.poach).forEach(s => {
     if (s.out >= 14 && G.cash > 500) actMatch(s.id); else actRelease(s.id);
