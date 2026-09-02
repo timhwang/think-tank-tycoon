@@ -426,6 +426,7 @@ function actTestify(fi) {
   const p = Math.max(0.35, Math.min(0.9, TUNE.testifyBase + s.out / 100 + (quirkId(s) === 'veteran' ? 0.15 : 0)));
   const ok = Math.random() < p;
   G.pendingNews = G.pendingNews || [];
+  { const R = rec(); R.testimonies++; if (ok) R.testimonyWins++; }
   if (ok) {
     const eff = Math.round(s.out * 1.5);
     side.total += eff; side.yours += eff;
@@ -909,6 +910,7 @@ function drawCrisis(news) {
   if (!pool.length) return;
   const def = pick(pool);
   G.usedCrises.push(def.id);
+  rec().crises++;
   sfx('crisis');
   const topSch = [...G.scholars].sort((x, y) => y.out - x.out)[0];
   const donorA = pick(G.donors.filter(d => d.lean > 0 && !d.lapsing)) || pick(G.donors.filter(d => !d.lapsing));
@@ -1153,6 +1155,7 @@ function endMonth() {
   // 4. donors pay
   const grants = monthlyGrants();
   G.cash += grants;
+  G.donors.forEach(d => d.paid = (d.paid || 0) + d.grant);
 
   // 4.5 grant cycles sunset — one month of grace to renew on stricter terms
   const gone = [];
@@ -1196,11 +1199,13 @@ function endMonth() {
     news.push({ h: `${d.name.toUpperCase()} PULLS FUNDING`, s: `“We wish the institution well,” says statement that does not wish the institution well. ${fmtMoney(d.grant)}/mo, gone.` });
     logLine(`${d.name} walks. ${fmtMoney(d.grant)}/mo, gone.`);
     bumpConf(TUNE.confWalk, `${d.name} walked`);
+    rec().donorsLost++;
   });
   G.donors = G.donors.filter(d => d.strikes < TUNE.strikeLimit);
 
   // 5.5 donor confidence: drift, stewardship, and a shaky base biting back
   confidenceMonth(news);
+  { const R = rec(); R.minConf = Math.min(R.minConf, G.confidence); if (playerLeadsBoard()) R.monthsLed++; }
 
   // 6. pay the bills
   const costs = monthlyCosts();
@@ -1228,6 +1233,7 @@ function endMonth() {
     quitting.forEach(s => {
       news.push({ h: `${s.name.toUpperCase()} QUITS, CITING “LACK OF INSTITUTIONAL SUPPORT”`, s: 'Storms out of a building they were never given keys to. Effective immediately.' });
       logLine(`${s.name} quits — ${TUNE.scholarStrikeLimit} straight months without ops support.`);
+      rec().scholarsLost++;
     });
   }
 
@@ -1382,9 +1388,17 @@ function resolveFight(f, news) {
   if (playerBanks) {
     G.stats.won++;
     bumpConf(TUNE.confWin, `banked ${f.title.split(':')[0].slice(0, 28)}`);
+    const R = rec(); R.wonByTag[f.tag] = (R.wonByTag[f.tag] || 0) + 1;
+    if (!R.bestUpset || winProb < R.bestUpset.prob) R.bestUpset = { title: f.title, prob: winProb };
   } else if (topRival) {
     const r = G.rivals.find(x => x.short === topRival);
-    if (r) r.victories = (r.victories || 0) + 1;
+    if (r) { r.victories = (r.victories || 0) + 1; r.vByTag = r.vByTag || {}; r.vByTag[f.tag] = (r.vByTag[f.tag] || 0) + 1; }
+  }
+  if (loser.yours > 0) {
+    const R = rec();
+    const lp = 100 - winProb; // odds the losing side (yours) had
+    if (lp >= 75) R.favoredLosses++;
+    if (!R.worstBeat || lp > R.worstBeat.prob) R.worstBeat = { title: f.title, prob: lp };
   }
   const creditLine = playerBanks ? `${tank().short} banks the victory.`
     : topRival ? `${topRival} banks the victory.` : 'Nobody in particular claims it.';
@@ -1425,6 +1439,7 @@ function resolveFight(f, news) {
     // while they're already moping sends some packing
     const bench = G.scholars.filter(s => s.tag === f.tag);
     if (!bench.length && G.scholars.length) {
+      rec().noBench++;
       // you picked a fight in a field you know nothing about, and lost:
       // the whole building is embarrassed
       G.scholars.forEach(s => s.mope = Math.max(s.mope || 0, TUNE.moraleMonths));
@@ -1451,6 +1466,9 @@ function resolveFight(f, news) {
   }
 }
 
+// ---------- campaign recap bookkeeping ----------
+function rec() { G.recap = G.recap || { wonByTag: {}, donorsLost: 0, scholarsLost: 0, crises: 0, monthsLed: 0, noBench: 0, testimonies: 0, testimonyWins: 0, favoredLosses: 0, minConf: 100 }; return G.recap; }
+
 function standings() {
   const rows = [
     { short: tank().short, name: tank().name, v: G.stats.won, you: true, align: tank().align },
@@ -1458,6 +1476,51 @@ function standings() {
   ];
   rows.sort((x, y) => y.v - x.v || (x.you ? -1 : y.you ? 1 : 0)); // you win ties
   return rows;
+}
+
+function recapItems(rows, rank, win) {
+  const R = rec();
+  const items = [];
+  const tagsLine = Object.entries(R.wonByTag).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(' · ') || 'none';
+  items.push({ h: 'THE CAMPAIGN IN NUMBERS', s: `${G.stats.won} victories banked (${tagsLine}) · ${G.stats.lost} contested losses · led the board ${R.monthsLed} of ${TUNE.electionMonth} months · ${R.crises} crises · ${R.donorsLost} donors walked, ${R.scholarsLost} scholars quit · peak treasury ${fmtMoney(G.stats.peakCash)}.` });
+  // why it went that way
+  if (!win) {
+    const top = rows[0];
+    const r = G.rivals.find(x => x.short === top.short);
+    const byTag = Object.entries((r && r.vByTag) || {}).sort((a, b) => b[1] - a[1]);
+    if (byTag.length) {
+      const [tag, n] = byTag[0];
+      const bench = G.scholars.filter(s => s.tag === tag).length;
+      const yours = R.wonByTag[tag] || 0;
+      items.push({ h: 'WHY IT WENT THAT WAY', s: `${top.short} banked ${n} of their ${top.v} victories in ${tag}, where you ${bench ? `finished with a bench ${bench} deep and banked ${yours}` : 'had no bench at all'}. The margin was ${top.v - G.stats.won}.` });
+    }
+  } else {
+    const byTag = Object.entries(R.wonByTag).sort((a, b) => b[1] - a[1]);
+    const runner = rows[1];
+    if (byTag.length) items.push({ h: 'WHY IT WENT THAT WAY', s: `Your edge was ${byTag[0][0]}: ${byTag[0][1]} victories, your deepest lane. ${runner ? `${runner.short} finished ${G.stats.won - runner.v} behind.` : ''}` });
+  }
+  // moments
+  const moments = [];
+  if (R.bestUpset) moments.push(`Best upset: ${R.bestUpset.title} at ${R.bestUpset.prob}%`);
+  if (R.worstBeat && R.worstBeat.prob >= 60) moments.push(`Worst beat: ${R.worstBeat.title}, lost as a ${R.worstBeat.prob}% favorite`);
+  if (R.testimonies) moments.push(`Testimony: ${R.testimonyWins}/${R.testimonies}`);
+  const allies = Object.entries(G.allies || {});
+  if (allies.length) moments.push(`Allies in government: ${allies.map(([t, n]) => `${t} ×${n}`).join(', ')}`);
+  const mvp = [...G.donors].sort((a, b) => (b.paid || 0) - (a.paid || 0))[0];
+  if (mvp && mvp.paid) moments.push(`Most valuable donor: ${mvp.name} (${fmtMoney(mvp.paid)} over the campaign)`);
+  if (moments.length) items.push({ h: 'MOMENTS', s: moments.join(' · ') });
+  // titles
+  const titles = [];
+  if (win && R.monthsLed <= 3) titles.push('THE SANDBAGGER (won from behind)');
+  if (R.noBench >= 2) titles.push('AMATEUR HOUR (lost twice outside your lanes)');
+  if (G.scholars.some(s => s.diva)) titles.push('DIVA WHISPERER (finished with a diva on staff)');
+  if (G.programs.wing) titles.push('LANDLORD (bought the annex)');
+  if (allies.reduce((a, [, n]) => a + n, 0) >= 2) titles.push('REVOLVING DOOR (two or more scholars in government)');
+  if (R.minConf >= 60) titles.push('IRON DEVELOPMENT (donor confidence never dipped below 60)');
+  if (R.favoredLosses >= 2) titles.push('THE WIRE HATES YOU (lost two fights as a 75%+ favorite)');
+  if (R.crises >= 4 && G.donors.length >= 3) titles.push('CRISIS MANAGER (four crises, base intact)');
+  if (titles.length) items.push({ h: 'TITLES EARNED', s: titles.join(' · ') });
+  return items;
 }
 
 function electionDay(news) {
@@ -1468,16 +1531,106 @@ function electionDay(news) {
   G.electionResult = { win, rank, victories: G.stats.won };
   sfx(win ? 'win' : 'lose');
   const list = rows.map((r, i) => `${i + 1}. ${r.short} — ${r.v}`).join('   ·   ');
+  const ch = loadChallenge();
+  const chLine = ch ? (G.stats.won > ch.v ? ` You beat ${ch.who}'s ${ch.v}.` : G.stats.won === ch.v ? ` You tied ${ch.who}'s ${ch.v}.` : ` ${ch.who}'s ${ch.v} stands.`) : '';
   const items = [
     win
-      ? { h: `${tank().name.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK IN WASHINGTON`, s: `Election Night, November 2028. ${G.stats.won} policy ${G.stats.won === 1 ? 'victory' : 'victories'} banked since January 2027. The gala will be insufferable.`, big: true }
-      : { h: `${rows[0].short.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK; ${tank().short.toUpperCase()} RANKS #${rank}`, s: `Election Night, November 2028. You banked ${G.stats.won} ${G.stats.won === 1 ? 'victory' : 'victories'} to their ${rows[0].v}. There is always the next cycle.`, big: true },
+      ? { h: `${tank().name.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK IN WASHINGTON`, s: `Election Night, November 2028. ${G.stats.won} policy ${G.stats.won === 1 ? 'victory' : 'victories'} banked since January 2027. The gala will be insufferable.${chLine}`, big: true }
+      : { h: `${rows[0].short.toUpperCase()} NAMED MOST INFLUENTIAL THINK TANK; ${tank().short.toUpperCase()} RANKS #${rank}`, s: `Election Night, November 2028. You banked ${G.stats.won} ${G.stats.won === 1 ? 'victory' : 'victories'} to their ${rows[0].v}. There is always the next cycle.${chLine}`, big: true },
     { h: 'FINAL STANDINGS', s: list },
+    ...recapItems(rows, rank, win),
     ...news,
   ];
+  recordRun(rank, win);
   save();
   render();
-  showPaper(items, true);
+  G.finalPaper = items;
+  startReturns(rows, items);
+}
+
+// election-night returns: counts tick up and the board reshuffles live
+let returnsTimer = null;
+function startReturns(rows, items) {
+  const win = $('#returnsWin');
+  if (!win || !win.classList) { showPaper(items, true); return; }
+  const shown = rows.map(r => ({ ...r, d: 0 }));
+  const draw = () => {
+    const sorted = [...shown].sort((a, b) => b.d - a.d || (a.you ? -1 : b.you ? 1 : 0));
+    $('#returnsBody').innerHTML = `<table class="ledger lb returns">${sorted.map((r, i) =>
+      `<tr class="${r.you ? 'you' : ''}"><td class="rank">${i + 1}</td><td>${iconImg('tank_' + tankIdByShort(r.short), 'sm')} ${r.short}${r.you ? ' ★' : ''}</td><td class="amt">${r.d}</td><td class="amt dim">/ ${r.v}</td></tr>`).join('')}</table>`;
+  };
+  win.classList.remove('hidden');
+  $('#returnsNote').textContent = 'Polls are closed. Returns are coming in…';
+  $('#returnsBtn').textContent = 'Skip to the verdict';
+  draw();
+  let i = 0;
+  if (returnsTimer) clearInterval(returnsTimer);
+  returnsTimer = setInterval(() => {
+    const pending = shown.filter(r => r.d < r.v);
+    if (!pending.length) { finishReturns(); return; }
+    const r = pending[i % pending.length]; r.d++; i++;
+    sfx('click');
+    draw();
+  }, 160);
+}
+
+function finishReturns() {
+  if (returnsTimer) { clearInterval(returnsTimer); returnsTimer = null; }
+  const win = $('#returnsWin');
+  if (!win) return;
+  const er = G.electionResult || {};
+  $('#returnsNote').textContent = er.win ? `${tank().short} is the most influential think tank in Washington.` : `${tank().short} finishes #${er.rank}.`;
+  $('#returnsBtn').textContent = 'Read the Campaign Recap ▶';
+  $('#returnsBtn').dataset.act = 'returnsdone';
+}
+
+// ---------- asynchronous multiplayer: challenge links + hall of records ----------
+function loadChallenge() { try { return JSON.parse(localStorage.getItem('ttt-challenge') || 'null'); } catch (e) { return null; } }
+
+function recordRun(rank, win) {
+  try {
+    const runs = JSON.parse(localStorage.getItem('ttt-runs') || '[]');
+    runs.unshift({ tank: tank().short, v: G.stats.won, rank, win, when: new Date().toISOString().slice(0, 10) });
+    localStorage.setItem('ttt-runs', JSON.stringify(runs.slice(0, 12)));
+  } catch (e) {}
+}
+
+function makeChallengeLink() {
+  const who = (prompt('Your name, for the challenge banner:') || 'A rival').trim().slice(0, 24) || 'A rival';
+  const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ who, tank: tank().id, tankShort: tank().short, v: G.stats.won, rank: (G.electionResult || {}).rank || 0 }))));
+  const url = `${location.origin}${location.pathname}?challenge=${payload}`;
+  const box = $('#challengeBox');
+  if (box) { box.value = url; box.classList.remove('hidden'); box.select(); }
+  try { navigator.clipboard.writeText(url); flash('Challenge link copied. Send it to someone with opinions.'); }
+  catch (e) { flash('Challenge link ready below — copy it and send it to someone with opinions.'); }
+}
+
+function bootChallenge() {
+  try {
+    const m = location.search.match(/[?&]challenge=([^&]+)/);
+    if (m) {
+      const c = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
+      if (c && c.who && c.tank) localStorage.setItem('ttt-challenge', JSON.stringify(c));
+      history.replaceState(null, '', location.pathname);
+    }
+  } catch (e) {}
+}
+
+function renderChallenge() {
+  const ch = loadChallenge();
+  const box = $('#challengeBanner');
+  if (!box || !box.classList) return;
+  if (!ch) { box.classList.add('hidden'); return; }
+  const t = TANKS.find(x => x.id === ch.tank);
+  box.innerHTML = `🎯 <b>CHALLENGE FROM ${ch.who.toUpperCase()}:</b> beat ${ch.v} ${ch.v === 1 ? 'victory' : 'victories'} running <b>${t ? t.name : ch.tankShort}</b>. <button class="btn tiny" data-act="pick" data-id="${ch.tank}">Accept</button> <button class="btn tiny" data-act="dismisschallenge">Dismiss</button>`;
+  box.classList.remove('hidden');
+  let runs = [];
+  try { runs = JSON.parse(localStorage.getItem('ttt-runs') || '[]'); } catch (e) {}
+  const hall = $('#hallBody');
+  if (hall && hall.classList) {
+    hall.innerHTML = runs.length ? runs.map(r => `<div class="pline">${r.when} · <b>${r.tank}</b> · ${r.v} victories · #${r.rank}${r.win ? ' 🏆' : ''}</div>`).join('') : '';
+    $('#hallBox').classList.toggle('hidden', !runs.length);
+  }
 }
 
 function gameOver(news) {
@@ -1516,6 +1669,10 @@ function showPaper(items, isGameOver) {
     `<div class="paper-item"><div class="headline-sm">${i.h}</div>${i.s ? `<div class="subhead-sm">${i.s}</div>` : ''}${meterHTML(i.meter)}</div>`).join('');
   $('#paperBtn').textContent = isGameOver ? 'Start Over' : 'Continue';
   $('#paperBtn').dataset.act = isGameOver ? 'restart' : 'closepaper';
+  const cb = $('#challengeBtn');
+  if (cb && cb.classList) cb.classList.toggle('hidden', !(isGameOver && G.electionResult));
+  const cbox = $('#challengeBox');
+  if (cbox && cbox.classList) cbox.classList.add('hidden');
   $('#paper').classList.remove('hidden');
   sfx('paper');
   if (items.some(i => i.meter)) sfx('roll');
@@ -1562,6 +1719,7 @@ function showScreen(which) {
 }
 
 function renderStart() {
+  renderChallenge();
   const hasSave = (() => { try { const r = localStorage.getItem(SAVE_KEY); if (!r) return false; const d = JSON.parse(r); return d.G && !d.G.over; } catch (e) { return false; } })();
   $('#resumeBox').classList.toggle('hidden', !hasSave);
   $('#continueRow').innerHTML = hasSave
@@ -1795,6 +1953,7 @@ function renderReport() {
   $('#reportBody').innerHTML = `
     <div class="pline"><b>${tank().name}</b></div>
     <div class="pline quirk">“${tank().motto}”</div>
+    ${(() => { const ch = loadChallenge(); return ch ? `<div class="pline warn">🎯 Challenge: beat ${ch.who}'s ${ch.v} (${ch.tankShort})</div>` : ''; })()}
     <div class="subdivider">RECORD</div>
     <div class="pline">${s.months} months · <b>${s.won} victories banked</b> · ${s.lost} losing sides</div>
     <div class="pline">Peak treasury: ${fmtMoney(s.peakCash)}</div>
@@ -1904,6 +2063,10 @@ document.addEventListener('click', e => {
   else if (act === 'prospect') actProspect(b.dataset.kind);
   else if (act === 'crisischoice') actCrisis(+b.dataset.idx);
   else if (act === 'testify') actTestify(+b.dataset.f);
+  else if (act === 'returnsdone') { $('#returnsWin').classList.add('hidden'); showPaper(G.finalPaper || [], true); }
+  else if (act === 'returnsskip') finishReturns();
+  else if (act === 'challenge') makeChallengeLink();
+  else if (act === 'dismisschallenge') { try { localStorage.removeItem('ttt-challenge'); } catch (e) {} renderStart(); }
   else if (act === 'serve') actServe(+b.dataset.id);
   else if (act === 'keep') actKeepScholar(+b.dataset.id);
   else if (act === 'renew') actRenew(b.dataset.id);
@@ -2001,5 +2164,6 @@ document.addEventListener('mouseover', e => {
 document.addEventListener('scroll', () => tipBox.classList.add('hidden'), true);
 
 // ---------- boot ----------
+bootChallenge();
 renderStart();
 showScreen('start');

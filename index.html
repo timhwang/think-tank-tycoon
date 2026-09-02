@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 
@@ -39,6 +39,11 @@
   <div class="window" id="startDialog">
     <div class="titlebar">SELECT YOUR INSTITUTION <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
     <div id="tankPicker"></div>
+  </div>
+  <div class="window hidden" id="challengeBanner"></div>
+  <div class="window hidden" id="hallBox">
+    <div class="titlebar">HALL OF RECORDS <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
+    <div class="wbody" id="hallBody"></div>
   </div>
   <div class="window hidden" id="resumeBox">
     <div class="titlebar">SAVED GAME <span class="widgets"><span>▁</span><span>▢</span><span>✕</span></span></div>
@@ -117,7 +122,11 @@
     <div class="paperdate" id="paperDate"></div>
     <div id="paperLead"></div>
     <div id="paperRest"></div>
-    <div class="paperbtnrow"><button class="btn big" id="paperBtn" data-act="closepaper">Continue</button></div>
+    <div class="paperbtnrow">
+      <button class="btn big" id="paperBtn" data-act="closepaper">Continue</button>
+      <button class="btn big hidden" id="challengeBtn" data-act="challenge" title="Copy a link that dares someone to beat this run">🎯 Challenge a Rival</button>
+    </div>
+    <input id="challengeBox" class="hidden challengebox" readonly>
   </div>
 </div>
 
@@ -125,6 +134,16 @@
 <div id="progWin" class="window hidden">
   <div class="titlebar">PROGRAMS <span class="widgets"><span data-act="progwin" style="cursor:pointer">✕</span></span></div>
   <div class="wbody" id="programsBody"></div>
+</div>
+
+<!-- ================= ELECTION NIGHT RETURNS ================= -->
+<div id="returnsWin" class="window hidden">
+  <div class="titlebar crisisbar">🗳 ELECTION NIGHT — RETURNS</div>
+  <div class="wbody">
+    <div class="pline returnsnote" id="returnsNote"></div>
+    <div id="returnsBody"></div>
+    <div class="tutbtns"><button class="btn" id="returnsBtn" data-act="returnsskip">Skip to the verdict</button></div>
+  </div>
 </div>
 
 <!-- ================= TUTORIAL WINDOW ================= -->
@@ -178,12 +197,13 @@
     <p>Washington has rhythms. The <b>State of the Union</b> (February) lands a marquee fight with double rewards; the <b>August recess</b> brings no new fights and 20% cheaper courting; November 2027 prints the one-year-out standings; and in <b>March 2028 a presidential campaign wants your endorsement</b>. Rival moves and lead changes make the paper too.</p>
     <p>Now and then the Bugle prints an <b>EXTRA</b> — a scandal, a funder feud, a shutdown that freezes the Hill, a surprise recess — and you must <b>pick your poison</b> before the next month begins. Paid exits scale with your size (a share of treasury or production); free exits hurt differently. The ticker logs everything; the month-end front page reports resolutions, departures, raises, and the verdict on Election Night.</p>
 
-    <div class="subdivider">8 · MONEY & LOSING</div>
+    <div class="subdivider">8 · ELECTION NIGHT, MONEY & LOSING</div>
+    <p>On Election Night the returns come in live and the board reshuffles; then the Bugle prints the recap — the numbers, <b>why it went that way</b>, the moments, and any titles you earned. <b>Challenge a Rival</b> copies a link that dares someone to beat your run with the same institution; accepted challenges show on the start screen and in HQ, and the Hall of Records keeps your finishes.</p>
     <p>The HQ ledger shows grants, payroll, rent (a flat monthly figure per institution), and programs. Every December payroll rises 9%. End two consecutive months in the red and the institution <b>folds before the election</b>. Otherwise, November 2028 ranks everyone by victories banked — and the top of that list is the only thing that counts.</p>
   </div>
 </div>
 
-<script src="data.js?v=24"></script>
-<script src="game.js?v=24"></script>
+<script src="data.js?v=25"></script>
+<script src="game.js?v=25"></script>
 </body>
 </html>
