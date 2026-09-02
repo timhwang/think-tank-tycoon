@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 
@@ -146,29 +146,41 @@
 <!-- ================= HELP WINDOW ================= -->
 <div id="helpWin" class="window hidden">
   <div class="titlebar">HOW THIS TOWN WORKS <span class="widgets"><span data-act="help" style="cursor:pointer">✕</span></span></div>
-  <div class="wbody">
-    <ul>
-      <li><b>The goal:</b> Bank the <b>most policy victories</b> by Election Night, November 2028 (22 months). A victory is credited to the single top contributor on a fight's winning side — the leaderboard in HQ REPORT tracks the race.</li>
-      <li><b>The loop:</b> Scholars produce <b>✦ influence</b> each month. Spend influence on <b>policy fights</b> and on <b>courting donors</b>. Donors pay the bills so you can hire more scholars. Victories cost influence the machine never gets back — that tension is the game.</li>
-      <li><b>Ops:</b> Some ops staff <b>support scholars</b> (1–3 each, shown on the card); others are zero-support <b>specialists</b> — comms (+✦), development (cheaper courting), editor (+✦ per scholar), creative (cheaper programs), gov-relations (+commit %) — and one very expensive consultant who does nothing at all. Unsupported scholars (newest hires lose coverage first) produce at <b>half rate</b> and quit after 2 straight unsupported months. Beware 🔥 <b>divas</b> (enormous output, colleagues keep quitting), <b>CHAOTIC</b> ops (3 capacity on paper, 20%/mo they deliver nothing), and quiet bad deals on both markets — the stats are the only warning.</li>
-      <li><b>Raids:</b> Candidates marked <b>AT [RIVAL]</b> currently work for the competition. Hiring one costs a 1.5× signing bonus and permanently dents that rival's monthly influence budget.</li>
-      <li><b>Fights:</b> Commit influence to a side. When the clock hits zero, <b>the wire decides</b>: your side's share of influence sets its win odds (sharpened — a 2:1 lead wins ~85%, but upsets happen), shown live on every card. If your side wins, you get the reward scaled by <b>your share of the winning side's total</b> — cash, clout (✦), and sometimes a free scholar, a warm donor intro, or donor amnesty. Rivals commit every month — the ⚑ line under each side shows exactly who's backing it.</li>
-      <li><b>Expertise:</b> Every scholar whose tag matches a fight amplifies influence you commit there by +10% (max +50%) — shown as the ★ chip on the card.</li>
-      <li><b>Partisan fit:</b> Scholars who share your institution's politics sign for <b>50% less</b>; aisle-crossers cost <b>+50%</b>. Simpatico donors court <b>30% cheaper</b>; opposed ones <b>+40%</b>. <b>Hardline shops (◀◀ / ▶▶) feel both effects harder</b>: scholars 60% off / +75%, donors 40% off / +60%. The ▼/▲ tips on market cards show the exact before → after price.</li>
-      <li><b>Donors:</b> Courting costs influence; grants arrive monthly. Every donor has a <b>demand</b> — a scholar on the roster, a vanity program, monthly influence pushed into their pet issue, or ideological purity (backing a side they hate = instant strike). Some donors are called-out good or bad deals (ANCHOR never lapses, MEGAPHONE boosts commits, MEDDLER drags output, JEALOUS resents new courtships…), and a few blue-chip patrons only appear once your donor base qualifies. Unmet demand = 1 strike per month. Two strikes and they walk. Grants run on <b>cycles</b> — when one ends you get a month to <b>renew on stricter terms</b> (half courting cost, tougher demand, one strike ends it) or let them lapse. Stale market? <b>Prospecting</b> buttons re-deal the hiring or donor market — for cash <i>and</i> influence, and each sweep of a market gets 50% pricier than the last.</li>
-      <li><b>Morale:</b> Lose a fight you contested and its issue's scholars are demoralized (−25% output, 2 months). Lose that issue <i>again</i> while they're down and some leave for greener pastures. A win in their field restores them instantly. Fighting where you have <b>no bench</b> (⚠ on the card) is worse: a contested loss there demoralizes the <b>entire roster</b>.</li>
-      <li><b>Crises:</b> Now and then the Bugle prints an EXTRA — a scandal, a funder feud, a shutdown — and you must pick your poison before the next month can begin. Every option costs something different, and the paid exits <b>scale with your size</b> (a share of treasury or production) — buying your way out never stops hurting.</li>
-      <li><b>Election season:</b> The final six months are announced — rival spending runs 50% hotter until the vote. Rival budgets also drift upward all game, and whenever <b>you lead the leaderboard</b> the town gangs up: rivals spend harder and counter-bid the sides you're winning. The endgame is the hardest part, especially for the favorite.</li>
-      <li><b>Payroll creep:</b> Every December, everyone gets a raise (+9%) — and rivals occasionally make a run at your best scholars: match the offer (permanent raise) or let them defect and strengthen that rival. Standing still is a slow way to lose.</li>
-      <li><b>Programs:</b> Money sinks (gala, podcast, lobby). Mostly useless for policy — but certain donors won't fund you without them. That's the game.</li>
-      <li><b>Letting go:</b> Ops can be let go without fallout. Firing a <b>scholar</b> unsettles donors (worse if it strands a donor's demand), and parting with a <b>donor</b> demoralizes the scholars whose issue they funded. Cuts have consequences.</li>
-      <li><b>Donor confidence:</b> One gauge for the whole base (HQ Report). Departures, firings, and courting faster than your development staff can steward all shake it; renewals and banked victories restore it, and worries fade slowly on their own. A Watchful base throws nervous strikes; a Spooked one charges more to court and double to renew; in Exodus a donor leaves every month. Development Directors raise how many donors you can steward.</li>
-      <li><b>Losing:</b> End two consecutive months with a negative treasury and the institution folds before the election. Otherwise, Election Night ranks everyone by victories banked.</li>
-    </ul>
+  <div class="wbody help">
+    <p class="helpintro">New here? The <b>Tour</b> button walks the panels one by one. This is the reference.</p>
+
+    <div class="subdivider">1 · THE GOAL</div>
+    <p>January 2027 to Election Night, November 2028 — twenty-two months. <b>Bank the most policy victories</b> and be named the most influential think tank in Washington. A victory is credited to the <b>single top contributor on a fight's winning side</b> (ties go to you); merely backing the winner still pays cash and clout by your share, but not credit. The HQ leaderboard tracks all seven institutions.</p>
+    <p>The final six months are <b>Election Season</b>: rival spending runs 50% hotter. Rival budgets also drift upward all game, and whenever <b>you lead the board</b> (🔥) the town gangs up — rivals spend harder and counter-bid the sides you're winning.</p>
+
+    <div class="subdivider">2 · THE ENGINE</div>
+    <p><b>Scholars mint ✦ influence. Influence wins fights and courts donors. Donors pay grants that fund staff.</b> Every point spent on glory is a point not invested in the machine — that tension is the whole game.</p>
+    <p>Ops staff <b>support</b> scholars (capacity on the card). Unsupported scholars — newest hires lose coverage first — produce at half rate and quit after two straight months. <b>Morale:</b> lose a fight you contested and that issue's scholars drop 25% for two months; lose the issue again while they're down and some leave. A win in their field restores them. Contest a fight with <b>no bench</b> at all (⚠) and a loss demoralizes the entire roster.</p>
+
+    <div class="subdivider">3 · FIGHTS</div>
+    <p>Four fights are live at a time. Commit ✦ with <b>+5 / +25</b>. The bar and percentages are <b>live win odds</b>: influence shares on a sharpened curve (a 2:1 lead wins about 90%), and when the ⏳ clock hits zero <b>the wire rolls</b> — upsets happen, and the Bugle animates every roll. The ⚑ lines show exactly who backs each side.</p>
+    <p>Rivals sit out fights beyond their pet issues, so their piles run deep where they do show up — and they <b>surge into a fight's final month</b>, so a last-minute dump meets a wall. Your bench amplifies commits: <b>+12% per matching scholar</b> (cap +60%), plus the War Room, a Gov Relations Lead, or a MEGAPHONE donor. Rewards scale by your share; some fights pay in kind — a free scholar, a warm donor intro, or amnesty on donor strikes.</p>
+
+    <div class="subdivider">4 · STAFF</div>
+    <p><b>Scholars:</b> the tag is their expertise; the lean sets partisan pricing (▼/▲ tips show the exact discount or premium, and hardline ◀◀/▶▶ shops feel both harder). 🔥 <b>DIVAs</b> produce enormously and drive colleagues out. Candidates marked <b>AT [RIVAL]</b> are raids: a 1.5× signing bonus, and that rival's budget takes a permanent dent. Some candidates are simply bad deals — no chip, just numbers that don't add up.</p>
+    <p><b>Ops:</b> support generalists (1–3 scholars) or zero-support <b>specialists</b> — comms, development, editor, creative, gov relations — plus a consultant who does nothing. <b>CHAOTIC</b> ops sometimes deliver no support at all; <b>EXPENSIVE</b> ones bleed overhead. Rivals periodically <b>bid for your scholars</b>: match (a permanent raise) or let them walk — an unanswered bid defects. Letting ops go costs only severance; letting a scholar go unsettles donors.</p>
+
+    <div class="subdivider">5 · DONORS</div>
+    <p>Court donors with ✦ (partisan pricing applies). Grants pay monthly on a <b>10–20 month cycle</b>; when it ends you get a month to <b>renew at half cost on stricter terms</b> (one strike ends a renewed deal) or let it lapse. Every donor has a <b>demand</b> — a scholar on staff, a program running, monthly influence in their pet issue, or ideological purity. An unmet demand is a strike; two and they walk. Perks and flaws are called out (ANCHOR, MEGAPHONE, MATCHING; MEDDLER, FICKLE, JEALOUS), and some blue-chip patrons appear only once your base qualifies.</p>
+    <p><b>Donor Confidence</b> (HQ Report) is one gauge for the whole base. Departures, firings, courting more than one donor a month, and holding more donors than your development staff can <b>steward</b> (base 3, +2 per Development Director) all shake it; renewals and banked victories restore it, and worries fade slowly. A Watchful base throws nervous strikes; a Spooked one charges more to court and double to renew; in Exodus a donor leaves every month. Parting with a donor also demoralizes the scholars in their issue.</p>
+
+    <div class="subdivider">6 · PROGRAMS & PROSPECTING</div>
+    <p><b>Programs</b> (the PROGRAMS button) are money sinks with a purpose: vanity programs exist because certain donors demand them; long-term ones — the journal, the War Room, junior fellows, the endowed chair, the West Annex — trade heavy cost for compounding advantage. A Creative Director makes them cheaper. Stale market? <b>PROSPECT</b> re-deals hiring or donors for cash <i>and</i> influence, and each sweep costs 50% more than the last.</p>
+
+    <div class="subdivider">7 · CRISES & THE BUGLE</div>
+    <p>Now and then the Bugle prints an <b>EXTRA</b> — a scandal, a funder feud, a shutdown that freezes the Hill, a surprise recess — and you must <b>pick your poison</b> before the next month begins. Paid exits scale with your size (a share of treasury or production); free exits hurt differently. The ticker logs everything; the month-end front page reports resolutions, departures, raises, and the verdict on Election Night.</p>
+
+    <div class="subdivider">8 · MONEY & LOSING</div>
+    <p>The HQ ledger shows grants, payroll, rent (a flat monthly figure per institution), and programs. Every December payroll rises 9%. End two consecutive months in the red and the institution <b>folds before the election</b>. Otherwise, November 2028 ranks everyone by victories banked — and the top of that list is the only thing that counts.</p>
   </div>
 </div>
 
-<script src="data.js?v=21"></script>
-<script src="game.js?v=21"></script>
+<script src="data.js?v=22"></script>
+<script src="game.js?v=22"></script>
 </body>
 </html>
