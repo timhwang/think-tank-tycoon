@@ -60,7 +60,12 @@ export function applyAction(world, pid, type, args) {
     case 'match': actMatch(n(a.id)); break;
     case 'release': actRelease(n(a.id)); break;
     case 'crisischoice': actCrisis(n(a.idx)); break;
-    case 'testify': actTestify(n(a.f)); break;
+    case 'testify': actTestify(n(a.f), a.prep === '1' || a.prep === true); break;
+    case 'recultivate': actRecultivate(a.id); break;
+    case 'letgo': actLetGo(a.id); break;
+    case 'matchops': actMatchOps(n(a.id)); break;
+    case 'releaseops': actReleaseOps(n(a.id)); break;
+    case 'oppo': actOppo(a.target); break;
     case 'serve': actServe(n(a.id)); break;
     case 'keep': actKeepScholar(n(a.id)); break;
     case 'progfocus': actProgFocus(a.tag); break;
@@ -104,7 +109,7 @@ export function resolveMonth(world) {
 
 export function viewFor(world, pid) {
   W = world; G = world.players.find(p => p.pid === pid);
-  const summaries = world.players.map(p => ({ pid: p.pid, name: p.name, tankId: p.tankId, v: p.stats.won, over: !!p.over }));
+  const summaries = world.players.map(p => ({ pid: p.pid, name: p.name, tankId: p.tankId, conf: p.confidence, v: p.stats.won, over: !!p.over }));
   return {
     me: G,
     world: { month: world.month, fights: world.fights, fightDeck: world.fightDeck, rivals: world.rivals,

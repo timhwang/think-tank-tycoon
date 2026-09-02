@@ -131,7 +131,22 @@ function botDecent() {
 
 function botShrewd() {
   // the stand and the revolving door
-  G.fights.forEach((f, fi) => { if (testimonyReady(f)) actTestify(fi); });
+  G.fights.forEach((f, fi) => { if (testimonyReady(f)) actTestify(fi, testifyPrepCost() === 0 || G.influence > 80); });
+  // rivals courting our donors and ops: keep what's worth keeping
+  G.donors.filter(d => d.poach).forEach(d => {
+    if (d.grant >= 80 && d.poach.cost <= G.influence - 20) actRecultivate(d.id); else actLetGo(d.id);
+  });
+  G.ops.filter(o => o.poach).forEach(o => {
+    if ((o.spec || (o.supports === undefined ? 2 : o.supports) >= 2) && G.cash > 400) actMatchOps(o.id); else actReleaseOps(o.id);
+  });
+  // an oppo file on the leader when we're chasing and flush
+  {
+    const rows = standings();
+    const me = rows.findIndex(r => r.you);
+    if (G.month >= 8 && me > 0 && G.influence > oppoCost() + 80 && G.oppoMonth !== G.month) {
+      const t = rows[0]; actOppo(t.human ? t.pid : t.short);
+    }
+  }
   G.scholars.filter(s => s.tapped).forEach(s => { if (s.out >= 14 && G.influence > 60) actKeepScholar(s.id); else actServe(s.id); });
   // answer standing offers first: poach bids and expiring donors
   G.scholars.filter(s => s.poach).forEach(s => {

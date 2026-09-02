@@ -177,6 +177,18 @@ ICONS = {
     'ops_6': 'an executive assistant balancing a coffee carrier and a tower of binders',     # Executive Assistant
     'ops_7': 'a cheerful technician tangled in AV cables holding a projector remote',        # AV Guy (Indispensable)
     'ops_8': 'a wrangler with a whistle herding a line of tiny identical suited interns',    # Intern Wrangler
+
+    # ---- report-card badges (10), keys match BADGES in data.js ----
+    'badge_sandbagger': 'a round bronze award medal on a striped ribbon, embossed with a tortoise crossing a finish line first',
+    'badge_amateur':    'a round tin award medal on a striped ribbon, embossed with a dunce cap sitting on a podium',
+    'badge_diva':       'a round gold award medal on a striped ribbon, embossed with a flaming microphone',
+    'badge_landlord':   'a round gold award medal on a striped ribbon, embossed with a brass key over a marble building',
+    'badge_revolving':  'a round silver award medal on a striped ribbon, embossed with a revolving door',
+    'badge_iron':       'a round iron award medal on a striped ribbon, embossed with a padlocked piggy bank',
+    'badge_wire':       'a round black award medal on a striped ribbon, embossed with a snapped rabbit-foot charm and a lightning bolt',
+    'badge_crisis':     'a round red award medal on a striped ribbon, embossed with a fire extinguisher',
+    'badge_oppo':       'a round dark-green award medal on a striped ribbon, embossed with a manila folder stamped with a red seal',
+    'badge_raider':     'a round steel award medal on a striped ribbon, embossed with a fishing hook lifting a briefcase',
 }
 
 

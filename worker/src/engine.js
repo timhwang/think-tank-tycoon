@@ -106,6 +106,29 @@ const TUNE = {
   poachChance: 0.12,     // monthly odds a rival makes a run at one of your scholars
   poachRivalGain: 3,     // rival budget gained when your scholar defects to them
   renewCostMult: 0.5,    // renewing an expiring donor costs this x fresh courting
+  // poaching, both directions; vendettas; attacks on donor confidence
+  donorPoachChance: 0.10, // monthly odds a rival makes a run at one of your donors
+  donorPoachRivalGain: 3, // rival budget gained when your donor defects to them
+  recultivateMult: 0.4,   // re-cultivating a courted donor costs this x fresh courting (halved by a Development Director)
+  confPoached: -10,       // confidence hit when a donor defects to a rival
+  donorRaidChance: 0.18,  // odds a market donor currently funds a rival (a raid)
+  donorRaidMult: 1.5,     // court-cost premium to raid a rival's donor
+  donorRaidHit: 3,        // rival budget lost per raided donor
+  vendettaMult: 2,        // poach attempts by a rival with a vendetta scale by this
+  opsPoachChance: 0.08,   // monthly odds (per grudge) a vendetta rival bids for one of your ops
+  whisperChance: 0.25,    // monthly odds a vendetta rival runs a whisper campaign
+  whisperHit: -5,         // confidence lost to a whisper campaign (halved by comms staff)
+  oppoBase: 20,           // influence to commission an oppo file...
+  oppoStep: 10,           // ...plus this per prior file
+  oppoOdds: 0.6,          // base odds the story lands (+15% Comms Director, +8% Comms Coordinator)
+  oppoHit: -12,           // target confidence lost when it lands
+  oppoBlowback: -8,       // your confidence lost when it backfires
+  rivalConfWin: 3,        // rival donor confidence per banked victory...
+  rivalConfLoss: -3,      // ...and per contested loss (a third or more of the losing pile)
+  testifyFlubPct: 0.15,   // a flub costs this share of your stake (never more than the witness's output)
+  testifyPileShare: 0.1,  // success adds at least this share of the opposing pile
+  testifyPrepCost: 10,    // influence to prep the witness (free with a Comms Director)
+  testifyPrepBonus: 0.15, // ...for this much extra odds
   startYear: 2027,
 };
 
@@ -587,7 +610,7 @@ const CRISES = [
   { id:'oped', title:'THE OLD OP-EDS SURFACE',
     body:'A viral thread unearths {SCHOLAR}’s spicier collected works. Donors are calling. The interns have made a supercut.',
     choices: [
-      { label:'Stand by them', hint:'Ideologically offended donors each take a strike' },
+      { label:'Stand by them', hint:'{OFFENDED}' },
       { label:'Quietly part ways', hint:'{SCHOLAR} leaves. No severance, no statement' },
       { label:'Damage-control blitz', inf:40, hint:'✦40, and by Friday it never happened' },
     ] },
@@ -646,7 +669,7 @@ const CRISES = [
     body:'{RIVAL} has funded a “transparency project” about you. Its first report is unflattering and, worse, well-designed.',
     choices: [
       { label:'Stay above the fray', hint:'Your standing commitments on every fight erode 20%' },
-      { label:'Counter-oppo', cash:50, hint:'{RIVAL}’s influence budget takes a permanent −3' },
+      { label:'Counter-oppo', cash:50, hint:'{RIVAL}’s budget takes a permanent −3 and their donors get nervous (confidence −10)' },
     ] },
   { id:'center', title:'{DONOR} WANTS A CENTER',
     body:'{DONOR} would like their name on something. Specifically: a Center. There would be a plaque, and a ribbon, and remarks.',
@@ -657,8 +680,8 @@ const CRISES = [
   { id:'endorse', title:'PRIMARY SEASON: A CAMPAIGN WANTS YOUR NAME', scripted:true,
     body:'It is March 2028 and a presidential campaign would like your institution on a letter. Another campaign has heard about the letter.',
     choices: [
-      { label:'Endorse the frontrunner', hint:'+✦40 of relevance; donors across the aisle from you take a strike' },
-      { label:'Endorse the insurgent', hint:'+✦25, and one nervous donor takes a strike' },
+      { label:'Endorse the frontrunner', hint:'+✦40 of relevance; {AISLE}' },
+      { label:'Endorse the insurgent', hint:'+✦25; {NERVOUS}' },
       { label:'Stay above it', hint:'Donor confidence +4. Nobody remembers who stayed above it' },
     ] },
   { id:'union', title:'THE INTERNS UNIONIZE',
@@ -680,19 +703,33 @@ const CALENDAR = { 1:'sotu', 7:'august', 10:'offyear', 13:'sotu', 14:'primaries'
 const CALENDAR_LABEL = { sotu:'SOTU', august:'RECESS', primaries:'PRIMARIES' };
 
 // Rival institutions doing rival things (flavor; {RIVAL} substituted)
+// titles earned on Election Night, with badge icons for the report card
+const BADGES = {
+  sandbagger: { icon:'badge_sandbagger', label:'THE SANDBAGGER', desc:'won from behind' },
+  amateur:    { icon:'badge_amateur',    label:'AMATEUR HOUR',    desc:'lost twice outside your lanes' },
+  diva:       { icon:'badge_diva',       label:'DIVA WHISPERER',  desc:'finished with a diva on staff' },
+  landlord:   { icon:'badge_landlord',   label:'LANDLORD',        desc:'bought the annex' },
+  revolving:  { icon:'badge_revolving',  label:'REVOLVING DOOR',  desc:'two or more scholars in government' },
+  iron:       { icon:'badge_iron',       label:'IRON DEVELOPMENT', desc:'donor confidence never dipped below 60' },
+  wire:       { icon:'badge_wire',       label:'THE WIRE HATES YOU', desc:'lost two fights as a 75%+ favorite' },
+  crisis:     { icon:'badge_crisis',     label:'CRISIS MANAGER',  desc:'four crises, base intact' },
+  oppo:       { icon:'badge_oppo',       label:'DIRTY TRICKSTER', desc:'three oppo files landed' },
+  raider:     { icon:'badge_raider',     label:'THE RAIDER',      desc:'poached three scholars or donors from rivals' },
+};
+
 const RIVAL_MOVES = [
-  { h:'{RIVAL} POACHES A BIG NAME', s:'The announcement calls it “a homecoming.” It is a raise.' },
+  { conf:3, h:'{RIVAL} POACHES A BIG NAME', s:'The announcement calls it “a homecoming.” It is a raise.' },
   { h:'{RIVAL} PUBLISHES 400-PAGE REPORT NOBODY REQUESTED', s:'The executive summary is eleven pages. The executive summary of the executive summary is forthcoming.' },
-  { h:'{RIVAL} GALA RAISES MILLIONS, EYEBROWS', s:'The ice sculpture was of the donor.' },
-  { h:'{RIVAL} FELLOW GOES VIRAL FOR THE WRONG REASONS', s:'The thread has been deleted. The screenshots have not.' },
+  { conf:4, h:'{RIVAL} GALA RAISES MILLIONS, EYEBROWS', s:'The ice sculpture was of the donor.' },
+  { conf:-5, h:'{RIVAL} FELLOW GOES VIRAL FOR THE WRONG REASONS', s:'The thread has been deleted. The screenshots have not.' },
   { h:'{RIVAL} LAUNCHES PODCAST', s:'Episode one: “Why We Launched a Podcast.”' },
-  { h:'{RIVAL} REBRANDS; LOGO NOW A DIFFERENT SHADE OF NAVY', s:'Consultants describe the shade as “forward-leaning.”' },
-  { h:'{RIVAL} OPENS “CENTER FOR THE FUTURE OF THINGS”', s:'Staffed by two fellows and a very good intern.' },
-  { h:'{RIVAL} PRESIDENT TESTIFIES, MOSTLY ABOUT THE OTHER PANELIST', s:'Members thanked the witness for their candor and asked the other guy a question.' },
-  { h:'{RIVAL} ANNOUNCES STRATEGIC PLAN THROUGH 2040', s:'Page one is a mission statement. Page two is also a mission statement.' },
+  { conf:-2, h:'{RIVAL} REBRANDS; LOGO NOW A DIFFERENT SHADE OF NAVY', s:'Consultants describe the shade as “forward-leaning.”' },
+  { conf:2, h:'{RIVAL} OPENS “CENTER FOR THE FUTURE OF THINGS”', s:'Staffed by two fellows and a very good intern.' },
+  { conf:-3, h:'{RIVAL} PRESIDENT TESTIFIES, MOSTLY ABOUT THE OTHER PANELIST', s:'Members thanked the witness for their candor and asked the other guy a question.' },
+  { conf:2, h:'{RIVAL} ANNOUNCES STRATEGIC PLAN THROUGH 2040', s:'Page one is a mission statement. Page two is also a mission statement.' },
   { h:'{RIVAL} HOSTS PANEL ON PANELS', s:'Q&A ran long. The question was a comment.' },
-  { h:'{RIVAL} DONOR DINNER ENDS IN “VIGOROUS EXCHANGE”', s:'A fork was raised. Not thrown — raised.' },
-  { h:'{RIVAL} INTERNS FORM SLACK CHANNEL, SEIZE MEANS OF SCHEDULING', s:'Leadership has been informed via calendar invite.' },
+  { conf:-5, h:'{RIVAL} DONOR DINNER ENDS IN “VIGOROUS EXCHANGE”', s:'A fork was raised. Not thrown — raised.' },
+  { conf:-2, h:'{RIVAL} INTERNS FORM SLACK CHANNEL, SEIZE MEANS OF SCHEDULING', s:'Leadership has been informed via calendar invite.' },
 ];
 
 // No-effect Bugle items for slow news months: wonk life plus the three
@@ -962,11 +999,36 @@ function buildRivals(chosenId) {
     budget: Math.round((TUNE.rivalFlat + t.budget * TUNE.rivalSlope) * TUNE.rivalBudgetMult),
     tags: t.tags,
     victories: 0,
+    conf: TUNE.confStart, dents: [], vendettas: {},
   });
   const chosen = new Set([].concat(chosenId));
   const rivals = TANKS.filter(t => !chosen.has(t.id)).map(mk);
   NPC_TANKS.forEach(t => rivals.push(mk(t)));
   return rivals;
+}
+
+// rivals have donor bases too: a gauge that scales their spending, a log of
+// every dent you put in them, and grudges against particular players
+function rivalConf(r) { return r.conf === undefined ? TUNE.confStart : r.conf; }
+function rivalConfMult(r) { const b = confBand(rivalConf(r)).id; return b === 'confident' ? 1 : b === 'watchful' ? 0.9 : b === 'spooked' ? 0.75 : 0.6; }
+function bumpRivalConf(r, delta) { r.conf = Math.max(0, Math.min(100, rivalConf(r) + delta)); }
+function dentRival(r, n, why, conf) {
+  if (!r) return;
+  if (n) r.budget = Math.max(TUNE.raidMinBudget, r.budget - n);
+  if (conf) bumpRivalConf(r, conf);
+  r.dents = r.dents || [];
+  r.dents.push({ n: n || 0, conf: conf || 0, why, m: W.month });
+}
+function dentText(r) {
+  return (r.dents || []).map(e => `${e.n ? `budget −${e.n}` : ''}${e.n && e.conf ? ', ' : ''}${e.conf ? `confidence ${e.conf}` : ''}: ${e.why} (${dateStr(e.m)})`).join(' · ');
+}
+function vendettaAgainstMe(r) { return !!((r.vendettas || {})[G.pid || 'me']); }
+function swearVendetta(r, why, news) {
+  if (!r || vendettaAgainstMe(r)) return;
+  r.vendettas = r.vendettas || {};
+  r.vendettas[G.pid || 'me'] = true;
+  logLine(`${r.short} swears a VENDETTA over ${why}: expect twice the poaching — scholars, ops and donors — plus whisper campaigns, from here on.`);
+  if (news) news.push({ h: `${r.short.toUpperCase()} DECLARES WAR ON ${tank().short.toUpperCase()}`, s: `${why} was, in their words, “a line.” Their development office has your donor list open; their recruiters have your org chart.` });
 }
 
 function mkDonorInstance(defId) {
@@ -1006,9 +1068,22 @@ function donorEligible(id) {
 }
 
 function drawDonorToMarket() {
+  const taken = () => new Set([...G.donors.map(d => d.id), ...G.donorMarket.map(d => d.id)]);
+  // online: now and then the card is another human's actual funder — a raid
+  if (players().length > 1 && Math.random() < 0.1) {
+    const others = players().filter(p => p !== G && p.donors.filter(x => !x.lapsing && !x.poach).length >= 2);
+    if (others.length) {
+      const v = pick(others);
+      const src = pick(v.donors.filter(x => !x.lapsing && !x.poach));
+      if (src && !taken().has(src.id)) {
+        const card = { ...mkDonorInstance(src.id), grant: src.grant, from: tankOf(v).short, fromPid: v.pid };
+        G.donorMarket.push(card);
+        return true;
+      }
+    }
+  }
   if (!G.donorDeck.length) {
-    const unavailable = new Set([...G.donors.map(d => d.id), ...G.donorMarket.map(d => d.id)]);
-    G.donorDeck = shuffle(DONORS.map(d => d.id).filter(id => !unavailable.has(id)));
+    G.donorDeck = shuffle(DONORS.map(d => d.id).filter(id => !taken().has(id)));
     if (!G.donorDeck.length) return false; // literally everyone already funds you
   }
   // skip prerequisite donors whose gate the current base doesn't clear;
@@ -1016,7 +1091,13 @@ function drawDonorToMarket() {
   const held = [];
   let id;
   while ((id = G.donorDeck.pop()) !== undefined) {
-    if (donorEligible(id)) { G.donorMarket.push(mkDonorInstance(id)); G.donorDeck.unshift(...held); return true; }
+    if (taken().has(id)) continue; // already yours (raids can leave duplicates in the deck)
+    if (donorEligible(id)) {
+      const inst = mkDonorInstance(id);
+      // some donors currently fund a rival: courting them is a raid
+      if (W && W.rivals && W.rivals.length && Math.random() < TUNE.donorRaidChance) inst.from = pick(W.rivals).short;
+      G.donorMarket.push(inst); G.donorDeck.unshift(...held); return true;
+    }
     held.push(id);
   }
   G.donorDeck.unshift(...held);
@@ -1211,24 +1292,42 @@ function bestWitness(tag) {
   return [...G.scholars].filter(s => s.tag === tag).sort((a, b) => b.out - a.out)[0];
 }
 
-function actTestify(fi) {
+function testifyOdds(s, prep) {
+  return Math.max(0.35, Math.min(0.95, TUNE.testifyBase + s.out / 100 + (quirkId(s) === 'veteran' ? 0.15 : 0) + (prep ? TUNE.testifyPrepBonus : 0)));
+}
+function testifyPrepCost() { return specCount('comms') ? 0 : TUNE.testifyPrepCost; }
+// what's actually on the table: success scales with the fight, a flub is capped
+function testifyStakes(f, s) {
+  const side = yoursOf(f.sides[0]) >= yoursOf(f.sides[1]) ? f.sides[0] : f.sides[1];
+  const opp = f.sides[side === f.sides[0] ? 1 : 0];
+  const gain = Math.max(Math.round(s.out * 1.5), Math.round(opp.total * TUNE.testifyPileShare));
+  const loss = Math.min(Math.round(yoursOf(side) * TUNE.testifyFlubPct), s.out);
+  return { side, gain, loss };
+}
+
+function actTestify(fi, prep) {
   const f = W.fights[fi];
   if (!f || !testimonyReady(f)) return;
   const s = bestWitness(f.tag);
-  const side = yoursOf(f.sides[0]) >= yoursOf(f.sides[1]) ? f.sides[0] : f.sides[1];
-  const p = Math.max(0.35, Math.min(0.9, TUNE.testifyBase + s.out / 100 + (quirkId(s) === 'veteran' ? 0.15 : 0)));
+  if (prep) {
+    const pc = testifyPrepCost();
+    if (G.influence < pc) return flash(`Prepping ${s.name} takes ✦${pc}. You have ${G.influence}.`);
+    G.influence -= pc;
+  }
+  const { side, gain, loss } = testifyStakes(f, s);
+  const p = testifyOdds(s, prep);
   const ok = Math.random() < p;
   G.pendingNews = G.pendingNews || [];
   { const R = rec(); R.testimonies++; if (ok) R.testimonyWins++; }
   if (ok) {
-    const eff = Math.round(s.out * 1.5);
+    const eff = gain;
     side.total += eff; addYours(side, eff);
     G.monthCommits = G.monthCommits || {}; G.monthCommits[f.tag] = (G.monthCommits[f.tag] || 0) + eff;
     f.testimony = { who: s.name, ok: true, eff };
     G.pendingNews.push({ h: `${s.name.toUpperCase()} COMMANDS THE HEARING ROOM`, s: `Members quoted the testimony back to each other. +${eff} to “${side.label}” on ${f.title}.` });
     logLine(`📣 ${s.name} testified on ${f.title}: +${eff} (${Math.round(p * 100)}% odds).`);
   } else {
-    const cut = Math.round(yoursOf(side) * 0.25);
+    const cut = loss;
     addYours(side, -cut); side.total -= cut;
     s.mope = Math.max(s.mope || 0, 1);
     f.testimony = { who: s.name, ok: false, eff: -cut };
@@ -1409,7 +1508,8 @@ function hireBonus(h) {
   return Math.ceil(b);
 }
 
-function courtCost(d) {
+function courtCost(d) { const c = courtCostBase(d); return d.from ? Math.ceil(c * TUNE.donorRaidMult) : c; }
+function courtCostBase(d) {
   const connector = G.ops.some(o => o.trait && o.trait.id === 'court') ? 0.9 : 1;
   const devdir = Math.pow(0.85, specCount('devdir'));
   const band = confBand().id;
@@ -1508,7 +1608,8 @@ function actHire(idx) {
   drawHire();
   if (h.from) {
     const r = W.rivals.find(x => x.short === h.from);
-    if (r) r.budget = Math.max(TUNE.raidMinBudget, r.budget - TUNE.raidBudgetHit);
+    dentRival(r, TUNE.raidBudgetHit, `you poached ${h.name}`);
+    rec().raids = (rec().raids || 0) + 1;
     logLine(`RAID: poached ${h.name} from ${h.from} for a ${fmtMoney(bonus)} buyout. ${h.from}'s influence budget slips to ~${r ? r.budget : '?'}/mo.`);
   } else {
     logLine(`Hired ${h.name} (${h.kind === 'scholar' ? TAG_NAMES[h.tag] : h.role}). Signing bonus ${fmtMoney(bonus)}.`);
@@ -1554,6 +1655,21 @@ function actCourt(idx) {
   if (G.influence < cost) return flash(`Courting ${d.name} takes ${cost} influence. You have ${G.influence}.`);
   G.influence -= cost;
   G.donorMarket.splice(idx, 1);
+  // a raid on another human's funder is a bid: they get a month to re-cultivate
+  if (d.fromPid) {
+    const victim = players().find(p => p.pid === d.fromPid);
+    const target = victim && victim.donors.find(x => x.id === d.id && !x.poach && !x.lapsing);
+    if (!target) { G.influence += cost; drawDonorToMarket(); save(); render(); return flash(`${d.name} is no longer where you left them.`); }
+    const me = G.name ? `${tank().short} (${G.name})` : tank().short;
+    target.poach = { by: me, byPid: G.pid, deadline: W.month + 1, cost: withPlayer(victim, () => recultivateCost(target)) };
+    victim.pendingNews = victim.pendingNews || [];
+    victim.pendingNews.push({ h: `${me.toUpperCase()} COURTS ${d.name.toUpperCase()}`, s: `A rival institution wants your funder. Re-cultivate them for ✦${target.poach.cost} from the donor panel this month, or the ${fmtMoney(target.grant)}/mo walks.` });
+    drawDonorToMarket();
+    G.courtsThisMonth = (G.courtsThisMonth || 0) + 1;
+    logLine(`RAID: bid ✦${cost} for ${d.name}, currently funding ${d.from}. They decide at month's end.`);
+    save(); render();
+    return;
+  }
   d.joined = W.month;
   // jealous patrons resent a new courtship
   G.donors.filter(x => x.flaw === 'jealous' && !x.lapsing).forEach(x => {
@@ -1561,6 +1677,16 @@ function actCourt(idx) {
     logLine(`${x.name} is jealous of your new courtship of ${d.name}. Strike ${x.strikes}.`);
   });
   G.donors.push(d);
+  if (d.from) {
+    // lured off a rival: they lose budget, and they take it personally
+    const r = W.rivals.find(x => x.short === d.from);
+    if (r) {
+      dentRival(r, TUNE.donorRaidHit, `you lured ${d.name} away`, -5);
+      swearVendetta(r, `your raid on ${d.name}`, G.pendingNews = G.pendingNews || []);
+      rec().raids = (rec().raids || 0) + 1;
+    }
+    d.raidedFrom = d.from; delete d.from;
+  }
   drawDonorToMarket();
   G.courtsThisMonth = (G.courtsThisMonth || 0) + 1;
   if (G.courtsThisMonth > 1) bumpConf(TUNE.confRush, `rushed courtship (${d.name})`);
@@ -1699,6 +1825,115 @@ function actRelease(id) {
   save(); render();
 }
 
+// ----- a rival is courting your donor -----
+function recultivateCost(d) {
+  let c = Math.ceil(courtCostBase(d) * TUNE.recultivateMult);
+  if (specCount('devdir')) c = Math.ceil(c / 2);
+  return Math.max(5, c);
+}
+
+function donorDefects(d, news) {
+  const r = W.rivals.find(x => x.short === d.poach.by);
+  if (r) r.budget += TUNE.donorPoachRivalGain;
+  const raider = d.poach.byPid ? players().find(p => p.pid === d.poach.byPid) : null;
+  const victim = tank().short;
+  G.donors = G.donors.filter(x => x !== d);
+  if (!raider) G.donorDeck.unshift(d.id);
+  bumpConf(TUNE.confPoached, `${d.name} defected to ${d.poach.by}`);
+  rec().donorsLost++;
+  news.push({ h: `${d.name.toUpperCase()} DEFECTS TO ${d.poach.by.toUpperCase()}`, s: `The dinner worked. ${fmtMoney(d.grant)}/mo now funds someone else's gala.` });
+  logLine(`${d.name} defected to ${d.poach.by}: ${fmtMoney(d.grant)}/mo gone.`);
+  if (raider) {
+    const nd = { ...d, strikes: 0, joined: W.month, renewals: 0, raidedFrom: victim };
+    delete nd.poach; delete nd.lapsing;
+    raider.donors.push(nd);
+    raider.pendingNews = raider.pendingNews || [];
+    raider.pendingNews.push({ h: `${d.name.toUpperCase()} COMES ABOARD`, s: `Your raid on ${victim} landed: ${fmtMoney(d.grant)}/mo, lured away.` });
+    withPlayer(raider, () => { logLine(`RAID: ${d.name} defected from ${victim} to you (${fmtMoney(d.grant)}/mo).`); rec().raids = (rec().raids || 0) + 1; });
+  }
+}
+
+function actRecultivate(id) {
+  const d = G.donors.find(x => x.id === id);
+  if (!d || !d.poach) return;
+  const c = d.poach.cost;
+  if (G.influence < c) return flash(`Re-cultivating ${d.name} takes ✦${c}. You have ${G.influence}.`);
+  G.influence -= c;
+  logLine(`Re-cultivated ${d.name} (✦${c}); ${d.poach.by} goes home hungry.`);
+  if (d.poach.byPid) {
+    const raider = players().find(p => p.pid === d.poach.byPid);
+    if (raider) { raider.pendingNews = raider.pendingNews || []; raider.pendingNews.push({ h: `${d.name.toUpperCase()} STAYS PUT`, s: `${tank().short} re-cultivated them. Your influence bought a very nice dinner for someone else.` }); }
+  }
+  delete d.poach;
+  save(); render();
+}
+
+function actLetGo(id) {
+  const d = G.donors.find(x => x.id === id);
+  if (!d || !d.poach) return;
+  if (!confirm(`Let ${d.name} go to ${d.poach.by}? ${fmtMoney(d.grant)}/mo walks, and the base notices.`)) return;
+  donorDefects(d, G.pendingNews = G.pendingNews || []);
+  save(); render();
+}
+
+// ----- a rival is courting your ops staff -----
+function actMatchOps(id) {
+  const o = G.ops.find(x => x.id === id);
+  if (!o || !o.poach) return;
+  if (!confirm(`Match ${o.poach.by}'s offer? ${o.name}'s salary rises to ${fmtMoney(o.poach.salary)}/mo, permanently.`)) return;
+  o.salary = o.poach.salary;
+  logLine(`Matched the offer: ${o.name} stays at ${fmtMoney(o.salary)}/mo.`);
+  delete o.poach;
+  save(); render();
+}
+
+function actReleaseOps(id) {
+  const o = G.ops.find(x => x.id === id);
+  if (!o || !o.poach) return;
+  G.ops = G.ops.filter(x => x !== o);
+  logLine(`Let ${o.name} walk to ${o.poach.by}. No severance, some regret.`);
+  save(); render();
+}
+
+// ----- the oppo file: attack a rival's donor confidence -----
+function oppoCost() { return TUNE.oppoBase + TUNE.oppoStep * (G.oppoUses || 0); }
+function commsShield() { return specCount('comms') > 0 || G.ops.some(o => /Comms/.test(o.role || '')); }
+function oppoOdds() { return Math.min(0.9, TUNE.oppoOdds + (specCount('comms') ? 0.15 : 0) + (G.ops.some(o => /Comms/.test(o.role || '')) ? 0.08 : 0)); }
+function actOppo(target) {
+  if (G.over) return;
+  if (G.oppoMonth === W.month) return flash('One oppo file a month. The town only reads so much.');
+  const cost = oppoCost();
+  if (G.influence < cost) return flash(`An oppo file costs ✦${cost} right now. You have ${G.influence}.`);
+  const r = W.rivals.find(x => x.short === target);
+  const victim = r ? null : players().find(p => p.pid === target && p !== G);
+  if (!r && !victim) return;
+  const vname = r ? r.short : (victim.name ? `${tankOf(victim).short} (${victim.name})` : tankOf(victim).short);
+  const odds = Math.round(oppoOdds() * 100);
+  if (!confirm(`Commission an oppo file on ${vname} for ✦${cost}? ${odds}% it lands (their donor confidence ${TUNE.oppoHit}); otherwise it blows back on your own base (${TUNE.oppoBlowback}).`)) return;
+  G.influence -= cost;
+  G.oppoUses = (G.oppoUses || 0) + 1;
+  G.oppoMonth = W.month;
+  const news = G.pendingNews = G.pendingNews || [];
+  const me = G.name ? `${tank().short} (${G.name})` : tank().short;
+  if (Math.random() < oppoOdds()) {
+    rec().oppoHits = (rec().oppoHits || 0) + 1;
+    if (r) { dentRival(r, 0, 'your oppo file', TUNE.oppoHit); swearVendetta(r, 'your oppo file', news); }
+    else {
+      withPlayer(victim, () => bumpConf(TUNE.oppoHit, `oppo file from ${me}`));
+      victim.pendingNews = victim.pendingNews || [];
+      victim.pendingNews.push({ h: `“TRANSPARENCY PROJECT” TARGETS ${tankOf(victim).short.toUpperCase()}`, s: `A well-designed report about you, funded by ${me}. Your donors are calling. Confidence ${TUNE.oppoHit}.` });
+    }
+    news.push({ h: `${vname.toUpperCase()} HAS A VERY BAD NEWS CYCLE`, s: `Your “transparency project” lands: three stories, one chart, a truly unkind graphic. Their donor confidence ${TUNE.oppoHit}.` });
+    logLine(`OPPO: the file on ${vname} landed (✦${cost}). Their donor confidence ${TUNE.oppoHit}.`);
+  } else {
+    bumpConf(TUNE.oppoBlowback, `oppo file on ${vname} backfired`);
+    if (r) swearVendetta(r, 'your oppo file', news);
+    news.push({ h: `SMEAR BACKFIRES ON ${tank().short.toUpperCase()}`, s: `The reporter called ${vname} for comment, then called your donors. Confidence ${TUNE.oppoBlowback}.` });
+    logLine(`OPPO: the file on ${vname} blew back (✦${cost}). Your donor confidence ${TUNE.oppoBlowback}.`);
+  }
+  save(); render();
+}
+
 function actCommit(fightIdx, sideIdx, amt) {
   const f = W.fights[fightIdx];
   if (!f) return;
@@ -1748,6 +1983,13 @@ const CRISIS_WHEN = {
   union: () => G.ops.length >= 1,
 };
 
+function offendedText(list) {
+  if (!list.length) return 'nobody on your base is offended — standing by them is free';
+  const cap = d => (d.renewals ? 1 : TUNE.strikeLimit);
+  const walkers = list.filter(d => d.strikes >= cap(d) - 1);
+  return `${list.map(d => d.name).join(', ')} take${list.length === 1 ? 's' : ''} a strike${walkers.length ? ` — ⚠ ${walkers.map(d => d.name).join(', ')} would walk` : ''}`;
+}
+
 function drawCrisis(news) {
   let pool = CRISES.filter(c => !c.scripted && !G.usedCrises.includes(c.id) && CRISIS_WHEN[c.id]());
   if (!pool.length) { G.usedCrises = []; pool = CRISES.filter(c => !c.scripted && CRISIS_WHEN[c.id]()); }
@@ -1781,6 +2023,13 @@ function drawCrisis(news) {
     DONOR_B: nameOf(G.donors, c.t.donorB),
     RIVAL: c.t.rival,
   };
+  // the op-eds card says exactly who'd be offended, so the choice is honest
+  if (def.id === 'oped') {
+    const s = G.scholars.find(x => x.id === c.t.scholar); const lean = s ? (s.lean || 0) : 0;
+    const angry = lean !== 0 ? activeDonors().filter(d => d.lean * lean < 0) : shuffle(activeDonors()).slice(0, 2);
+    c.t.offended = angry.map(d => d.id);
+    c.n.OFFENDED = offendedText(angry);
+  }
   G.crisis = c;
   news.push({ h: `BUGLE EXTRA: ${crisisSub(def.title)}`, s: 'A decision is required before next month can begin.' });
   logLine(`CRISIS: ${crisisSub(def.title)} — decide before the next END MONTH.`);
@@ -1789,7 +2038,18 @@ function drawCrisis(news) {
 function forceCrisis(id, news) {
   const def = CRISES.find(c => c.id === id);
   if (!def) return;
-  G.crisis = { id, t: { rival: pick(W.rivals).short }, n: { RIVAL: pick(W.rivals).short } };
+  const rival = pick(W.rivals).short;
+  G.crisis = { id, t: { rival }, n: { RIVAL: rival } };
+  if (id === 'endorse') {
+    const sign = Math.sign(tank().align);
+    const aisle = sign ? activeDonors().filter(d => d.lean * sign < 0) : shuffle(activeDonors()).slice(0, 2);
+    const nervous = pick(activeDonors());
+    const cap = d => (d.renewals ? 1 : TUNE.strikeLimit);
+    G.crisis.t.aisle = aisle.map(d => d.id);
+    G.crisis.t.nervous = nervous ? nervous.id : null;
+    G.crisis.n.AISLE = offendedText(aisle);
+    G.crisis.n.NERVOUS = nervous ? `${nervous.name} takes a strike${nervous.strikes >= cap(nervous) - 1 ? ' — ⚠ they would walk' : ''}` : 'no donor minds';
+  }
   news.push({ h: `BUGLE EXTRA: ${def.title}`, s: 'A decision is required before next month can begin.' });
   logLine(`CRISIS: ${def.title} — decide before the next END MONTH.`);
   sfx('crisis');
@@ -1797,13 +2057,14 @@ function forceCrisis(id, news) {
 
 function crisisSub(text) {
   if (!G.crisis) return text;
-  return text.replace(/\{(SCHOLAR|TOP|DIVA|OPS|DONOR_B|DONOR|RIVAL)\}/g, (m, k) => G.crisis.n[k] || '(someone)');
+  return text.replace(/\{(SCHOLAR|TOP|DIVA|OPS|DONOR_B|DONOR|RIVAL|OFFENDED|AISLE|NERVOUS)\}/g, (m, k) => G.crisis.n[k] || '(someone)');
 }
 
 const CRISIS_FX = {
   oped: [
     c => { const s = G.scholars.find(x => x.id === c.t.scholar); const lean = s ? (s.lean || 0) : 0;
-      const angry = lean !== 0 ? G.donors.filter(d => d.lean * lean < 0) : shuffle(G.donors).slice(0, 2);
+      const angry = c.t.offended ? G.donors.filter(d => c.t.offended.includes(d.id))
+        : lean !== 0 ? G.donors.filter(d => d.lean * lean < 0) : shuffle(G.donors).slice(0, 2);
       angry.forEach(d => d.strikes++);
       return `${angry.length} donor${angry.length === 1 ? '' : 's'} took a strike's worth of offense.`; },
     c => { G.scholars = G.scholars.filter(x => x.id !== c.t.scholar); return `${c.n.SCHOLAR} is gone by lunch.`; },
@@ -1851,18 +2112,19 @@ const CRISIS_FX = {
   ],
   smear: [
     () => { W.fights.forEach(f => f.sides.forEach(s => { const cut = Math.ceil(yoursOf(s) * 0.2); addYours(s, -cut); s.total -= cut; })); return 'Your standing commitments erode 20% across the board.'; },
-    c => { const r = W.rivals.find(x => x.short === c.t.rival); if (r) r.budget = Math.max(TUNE.raidMinBudget, r.budget - 3); return `Counter-oppo lands: ${c.n.RIVAL}'s budget takes a permanent −3.`; },
+    c => { const r = W.rivals.find(x => x.short === c.t.rival); dentRival(r, 3, 'counter-oppo', -10); return `Counter-oppo lands: ${c.n.RIVAL}'s budget takes a permanent −3 and their donors get nervous.`; },
   ],
   center: [
     c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) { d.grant += 30; d.term = (d.term || 18) + 6; } return `The ${c.n.DONOR} Center opens. The plaque is enormous; the grant grows ${fmtMoney(30)}/mo.`; },
     c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) d.strikes++; return `${c.n.DONOR} takes offense.`; },
   ],
   endorse: [
-    () => { G.influence += 40; const sign = Math.sign(tank().align);
-      const angry = sign ? G.donors.filter(d => d.lean * sign < 0 && !d.lapsing) : shuffle(activeDonors()).slice(0, 2);
+    c => { G.influence += 40; const sign = Math.sign(tank().align);
+      const angry = c.t.aisle ? G.donors.filter(d => c.t.aisle.includes(d.id))
+        : sign ? G.donors.filter(d => d.lean * sign < 0 && !d.lapsing) : shuffle(activeDonors()).slice(0, 2);
       angry.forEach(d => d.strikes++);
       return `Your name is on the letter. ✦40 of relevance; ${angry.length} donor${angry.length === 1 ? '' : 's'} across the aisle took a strike.`; },
-    () => { G.influence += 25; const d = pick(activeDonors()); if (d) d.strikes++;
+    c => { G.influence += 25; const d = (c.t.nervous && G.donors.find(x => x.id === c.t.nervous)) || pick(activeDonors()); if (d) d.strikes++;
       return `You backed the insurgent: ✦25, and ${d ? d.name : 'a donor'} is nervous about it.`; },
     () => { bumpConf(4, 'stayed above the primary'); return 'You stayed above it. The base approves; the campaigns forget you exist.'; },
   ],
@@ -1958,7 +2220,7 @@ function rivalCommits() {
     if (!targets.length) return;
     const seasonal = W.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
     const heat = hot ? TUNE.frontrunnerMult : 1;
-    const budget = Math.round(r.budget * drift * seasonal * heat * (0.75 + Math.random() * 0.5));
+    const budget = Math.round(r.budget * drift * seasonal * heat * rivalConfMult(r) * (0.75 + Math.random() * 0.5));
     const wSum = targets.reduce((a, t) => a + t.w, 0);
     targets.forEach(t => {
       const amt = Math.floor(budget * t.w / wSum);
@@ -2007,11 +2269,14 @@ function monthWorldPre(newsFor) {
     W.leaderShort = leader;
   }
 
-  // 7.6 rivals do rival things
+  // 7.6 rivals do rival things — some of it moves their own donors
   if (Math.random() < 0.35) {
     const r = pick(W.rivals), mv = pick(RIVAL_MOVES);
-    newsAll(newsFor, { h: mv.h.replace('{RIVAL}', r.short.toUpperCase()), s: mv.s.replace('{RIVAL}', r.short) });
+    if (mv.conf) bumpRivalConf(r, mv.conf);
+    newsAll(newsFor, { h: mv.h.replace('{RIVAL}', r.short.toUpperCase()), s: mv.s.replace('{RIVAL}', r.short) + (mv.conf ? ` (Their donor confidence ${mv.conf > 0 ? '+' : ''}${mv.conf}.)` : '') });
   }
+  // 7.7 rival donor confidence drifts home
+  W.rivals.forEach(r => { const c = rivalConf(r); if (c < TUNE.confStart) bumpRivalConf(r, Math.min(TUNE.confDrift, TUNE.confStart - c)); else if (c > TUNE.confStart) bumpRivalConf(r, -1); });
 
 }
 
@@ -2158,15 +2423,57 @@ function monthPlayer(news) {
     logLine(`${s.name} defected to ${s.poach.by} — the bid went unmatched.`);
   });
 
-  // 6.56 a rival makes a run at one of your scholars
-  if (G.scholars.length >= 2 && !G.scholars.some(s => s.poach) && Math.random() < TUNE.poachChance) {
+  // 6.56 a rival makes a run at one of your scholars (grudges make it a habit)
+  const grudges = W.rivals.filter(r => vendettaAgainstMe(r));
+  if (G.scholars.length >= 2 && !G.scholars.some(s => s.poach) && Math.random() < TUNE.poachChance * (grudges.length ? TUNE.vendettaMult : 1)) {
     const target = pick([...G.scholars].sort((a, b) => b.out - a.out).slice(0, 3));
-    const rival = pick(W.rivals);
+    const rival = grudges.length ? pick(grudges) : pick(W.rivals);
     const offer = Math.ceil(target.salary * (1 + ri(25, 40) / 100));
     target.poach = { by: rival.short, salary: offer, deadline: W.month + 1 };
     news.push({ h: `${rival.short.toUpperCase()} MAKES A RUN AT ${target.name.toUpperCase()}`, s: `They're offering ${fmtMoney(offer)}/mo (currently ${fmtMoney(target.salary)}). Match it from the staff panel, or lose them next month.` });
     logLine(`${rival.short} is courting ${target.name} at ${fmtMoney(offer)}/mo — match or let them walk.`);
   }
+
+  // 6.57 unresolved donor bids: the donor takes the other offer
+  G.donors.filter(d => d.poach && d.poach.deadline <= W.month).forEach(d => donorDefects(d, news));
+
+  // 6.58 a rival makes a run at one of your donors
+  {
+    const pool = activeDonors().filter(d => !d.poach);
+    if (pool.length >= 2 && !G.donors.some(d => d.poach) && Math.random() < TUNE.donorPoachChance * (grudges.length ? TUNE.vendettaMult : 1)) {
+      const rival = grudges.length ? pick(grudges) : pick(W.rivals);
+      const weak = pool.filter(d => d.strikes > 0 || !demandMet(d) || d.flaw === 'fickle');
+      const target = weak.length ? pick(weak) : [...pool].sort((a, b) => b.grant - a.grant)[0];
+      target.poach = { by: rival.short, deadline: W.month + 1, cost: recultivateCost(target) };
+      news.push({ h: `${rival.short.toUpperCase()} COURTS ${target.name.toUpperCase()}`, s: `A dinner, a deck, a naming opportunity. Re-cultivate them for ✦${target.poach.cost} from the donor panel this month, or the ${fmtMoney(target.grant)}/mo follows the flattery.` });
+      logLine(`${rival.short} is courting ${target.name} — re-cultivate (✦${target.poach.cost}) or lose them next month.`);
+    }
+  }
+
+  // 6.59 ops bids: only a rival with a grudge bothers with your support staff
+  G.ops.filter(o => o.poach && o.poach.deadline <= W.month).forEach(o => {
+    G.ops = G.ops.filter(x => x !== o);
+    news.push({ h: `${o.name.toUpperCase()} DEFECTS TO ${o.poach.by.toUpperCase()}`, s: 'The offer sat unanswered. Someone else now knows where the projector cable lives.' });
+    logLine(`${o.name} left for ${o.poach.by} — the bid went unmatched.`);
+  });
+  if (grudges.length && G.ops.length >= 1 && !G.ops.some(o => o.poach) && Math.random() < TUNE.opsPoachChance * grudges.length) {
+    const rival = pick(grudges);
+    const target = pick(G.ops.filter(o => o.spec || (o.supports === undefined ? TUNE.supportRatio : o.supports) >= 2)) || pick(G.ops);
+    const offer = Math.ceil(target.salary * (1 + ri(20, 35) / 100));
+    target.poach = { by: rival.short, salary: offer, deadline: W.month + 1 };
+    news.push({ h: `${rival.short.toUpperCase()} MAKES A RUN AT ${target.name.toUpperCase()}`, s: `The vendetta reaches the ops floor: ${fmtMoney(offer)}/mo (now ${fmtMoney(target.salary)}). Match it from the staff panel, or lose them next month.` });
+    logLine(`${rival.short} is courting ${target.name} (ops) at ${fmtMoney(offer)}/mo — match or let them walk.`);
+  }
+
+  // 6.62 whisper campaigns: a rival with a grudge works your donors' phones
+  grudges.forEach(r => {
+    if (Math.random() >= TUNE.whisperChance) return;
+    const shielded = commsShield();
+    const hit = shielded ? Math.ceil(TUNE.whisperHit / 2) : TUNE.whisperHit;
+    bumpConf(hit, `whisper campaign by ${r.short}`);
+    news.push({ h: `${r.short.toUpperCase()} WHISPERS TO YOUR DONORS`, s: `“Have you seen their numbers?” Donor confidence ${hit}${shielded ? ' — your comms shop got ahead of it' : '; a comms desk would have halved it'}.` });
+    logLine(`${r.short}'s whisper campaign: confidence ${hit}.`);
+  });
 
   // 6.6 annual reviews: every December, payroll ratchets up
   if ((W.month + 1) % 12 === 0) {
@@ -2287,8 +2594,12 @@ function resolveFight(f, newsFor) {
     });
   } else if (topRival) {
     const r = W.rivals.find(x => x.short === topRival);
-    if (r) { r.victories = (r.victories || 0) + 1; r.vByTag = r.vByTag || {}; r.vByTag[f.tag] = (r.vByTag[f.tag] || 0) + 1; }
+    if (r) { r.victories = (r.victories || 0) + 1; r.vByTag = r.vByTag || {}; r.vByTag[f.tag] = (r.vByTag[f.tag] || 0) + 1; bumpRivalConf(r, TUNE.rivalConfWin); }
   }
+  // rivals who carried a third or more of the losing pile feel it at home
+  Object.entries(loser.rivals || {}).forEach(([short, amt]) => {
+    if (loser.total > 0 && amt >= loser.total * 0.3) { const r = W.rivals.find(x => x.short === short); if (r) bumpRivalConf(r, TUNE.rivalConfLoss); }
+  });
   const creditName = topHuman ? (topHuman.name ? `${tankOf(topHuman).short} (${topHuman.name})` : tankOf(topHuman).short) : topRival;
 
   players().forEach(P => withPlayer(P, () => {
@@ -2307,6 +2618,7 @@ function resolveFight(f, newsFor) {
     if (mine > 0) {
       G.scholars.forEach(s => { if (s.tag === f.tag && s.mope > 0) { s.mope = 0; logLine(`${s.name} is buoyed by the ${f.tag} win — morale restored.`); } });
       const share = winner.total > 0 ? mine / winner.total : 1;
+      { const RR = rec(); RR.wins = RR.wins || []; RR.wins.push({ id: f.defId, title: f.title, share: Math.round(share * 100), prob: winProb, banks }); }
     const R = fightReward(f);
     const gains = [];
     if (R.cash) { const pay = Math.round(R.cash * share); G.cash += pay; gains.push(fmtMoney(pay)); }
@@ -2333,6 +2645,7 @@ function resolveFight(f, newsFor) {
       logLine(`${banks ? 'VICTORY BANKED' : 'Backed the winner'}: ${f.title} → ${gains.join('; ')} (${Math.round(share * 100)}% of the winning side).`);
     } else if (lost > 0) {
       G.stats.lost++;
+      { const RR = rec(); RR.losses = RR.losses || []; RR.losses.push({ id: f.defId, title: f.title, lost, prob: 100 - winProb }); }
     // morale: a contested loss deflates the matching bench; a repeat loss
     // while they're already moping sends some packing
     const bench = G.scholars.filter(s => s.tag === f.tag);
@@ -2371,7 +2684,8 @@ function standings() {
     const t = tankOf(p);
     const you = p === G || (!!G && !!G.pid && p.pid === G.pid);
     return { short: t.short, name: t.name, pname: p.name || null, pid: p.pid || null, human: true,
-             v: p.stats ? p.stats.won : (p.v || 0), you, align: t.align };
+             v: p.stats ? p.stats.won : (p.v || 0), you, align: t.align,
+             conf: p.confidence !== undefined ? p.confidence : (p.conf === undefined ? null : p.conf) };
   });
   W.rivals.forEach(r => rows.push({ short: r.short, name: r.name, v: r.victories || 0, you: false, human: false, align: r.align }));
   rows.sort((x, y) => y.v - x.v || (x.you ? -1 : y.you ? 1 : 0)); // you win ties
@@ -2399,28 +2713,42 @@ function recapItems(rows, rank, win) {
     const runner = rows[1];
     if (byTag.length) items.push({ h: 'WHY IT WENT THAT WAY', s: `Your edge was ${byTag[0][0]}: ${byTag[0][1]} victories, your deepest lane. ${runner ? `${runner.short} finished ${G.stats.won - runner.v} behind.` : ''}` });
   }
+  // the fights that mattered, with their icons
+  const wins = (R.wins || []).filter(w => w.banks).sort((a, b) => b.share - a.share || a.prob - b.prob).slice(0, 6);
+  if (wins.length) items.push({ h: 'BIGGEST WINS', html: recapGrid(wins, 'win') });
+  const losses = (R.losses || []).sort((a, b) => b.lost - a.lost).slice(0, 6);
+  if (losses.length) items.push({ h: 'WORST LOSSES', html: recapGrid(losses, 'loss') });
   // moments
   const moments = [];
-  if (R.bestUpset) moments.push(`Best upset: ${R.bestUpset.title} at ${R.bestUpset.prob}%`);
-  if (R.worstBeat && R.worstBeat.prob >= 60) moments.push(`Worst beat: ${R.worstBeat.title}, lost as a ${R.worstBeat.prob}% favorite`);
   if (R.testimonies) moments.push(`Testimony: ${R.testimonyWins}/${R.testimonies}`);
+  if (R.oppoHits) moments.push(`Oppo files landed: ${R.oppoHits}`);
+  if (R.raids) moments.push(`Raids: ${R.raids}`);
   const allies = Object.entries(G.allies || {});
   if (allies.length) moments.push(`Allies in government: ${allies.map(([t, n]) => `${t} ×${n}`).join(', ')}`);
   const mvp = [...G.donors].sort((a, b) => (b.paid || 0) - (a.paid || 0))[0];
   if (mvp && mvp.paid) moments.push(`Most valuable donor: ${mvp.name} (${fmtMoney(mvp.paid)} over the campaign)`);
   if (moments.length) items.push({ h: 'MOMENTS', s: moments.join(' · ') });
-  // titles
+  // titles, as badges
   const titles = [];
-  if (win && R.monthsLed <= 3) titles.push('THE SANDBAGGER (won from behind)');
-  if (R.noBench >= 2) titles.push('AMATEUR HOUR (lost twice outside your lanes)');
-  if (G.scholars.some(s => s.diva)) titles.push('DIVA WHISPERER (finished with a diva on staff)');
-  if (G.programs.wing) titles.push('LANDLORD (bought the annex)');
-  if (allies.reduce((a, [, n]) => a + n, 0) >= 2) titles.push('REVOLVING DOOR (two or more scholars in government)');
-  if (R.minConf >= 60) titles.push('IRON DEVELOPMENT (donor confidence never dipped below 60)');
-  if (R.favoredLosses >= 2) titles.push('THE WIRE HATES YOU (lost two fights as a 75%+ favorite)');
-  if (R.crises >= 4 && G.donors.length >= 3) titles.push('CRISIS MANAGER (four crises, base intact)');
-  if (titles.length) items.push({ h: 'TITLES EARNED', s: titles.join(' · ') });
+  if (win && R.monthsLed <= 3) titles.push('sandbagger');
+  if (R.noBench >= 2) titles.push('amateur');
+  if (G.scholars.some(s => s.diva)) titles.push('diva');
+  if (G.programs.wing) titles.push('landlord');
+  if (allies.reduce((a, [, n]) => a + n, 0) >= 2) titles.push('revolving');
+  if (R.minConf >= 60) titles.push('iron');
+  if (R.favoredLosses >= 2) titles.push('wire');
+  if (R.crises >= 4 && G.donors.length >= 3) titles.push('crisis');
+  if ((R.oppoHits || 0) >= 3) titles.push('oppo');
+  if ((R.raids || 0) >= 3) titles.push('raider');
+  if (titles.length) items.push({ h: 'TITLES EARNED', s: titles.map(k => BADGES[k].label).join(' · '),
+    html: `<div class="badgegrid">${titles.map(k => { const b = BADGES[k]; return `<div class="badge" title="${b.desc}">${iconImg(b.icon, 'lg')}<div class="rc-title">${b.label}</div><div class="rc-sub">${b.desc}</div></div>`; }).join('')}</div>` });
   return items;
+}
+
+function recapGrid(list, kind) {
+  return `<div class="recapgrid">${list.map(w => `<div class="recapcell" title="${w.title}">${iconImg('fight_' + w.id, 'lg')}
+    <div class="rc-title">${w.title.split(':')[0].slice(0, 30)}</div>
+    <div class="rc-sub">${kind === 'win' ? `${w.share}% of the pile · a ${w.prob}% shot` : `✦${w.lost} down the drain · ${w.prob}% to win`}</div></div>`).join('')}</div>`;
 }
 
 function electionDay(news) {
@@ -2532,9 +2860,9 @@ function showPaper(items, isGameOver) {
   const lead = items.find(i => i.big) || items[0];
   const rest = items.filter(i => i !== lead);
   $('#paperDate').textContent = `${dateStr(W.month)} — Vol. ${W.month + 1} — Still 75¢`;
-  $('#paperLead').innerHTML = `<div class="headline">${lead.h}</div>${lead.s ? `<div class="subhead">${lead.s}</div>` : ''}${meterHTML(lead.meter)}`;
+  $('#paperLead').innerHTML = `<div class="headline">${lead.h}</div>${lead.s ? `<div class="subhead">${lead.s}</div>` : ''}${lead.html || ''}${meterHTML(lead.meter)}`;
   $('#paperRest').innerHTML = rest.map(i =>
-    `<div class="paper-item"><div class="headline-sm">${i.h}</div>${i.s ? `<div class="subhead-sm">${i.s}</div>` : ''}${meterHTML(i.meter)}</div>`).join('');
+    `<div class="paper-item"><div class="headline-sm">${i.h}</div>${i.s && !i.html ? `<div class="subhead-sm">${i.s}</div>` : ''}${i.html || ''}${meterHTML(i.meter)}</div>`).join('');
   $('#paperBtn').textContent = isGameOver ? 'Start Over' : 'Continue';
   $('#paperBtn').dataset.act = isGameOver ? 'restart' : 'closepaper';
 
@@ -2685,7 +3013,10 @@ function renderStaff(cap) {
           <div class="pline"><b>${o.name}</b>${o.spec ? ` <span class="chip ${SPECIALISTS.find(x => x.id === o.spec).dud ? 'raid' : 'want'}" title="${SPECIALISTS.find(x => x.id === o.spec).tip}">${SPECIALISTS.find(x => x.id === o.spec).fx.toUpperCase()}</span>` : ''}${o.trait ? ` <span class="chip ${o.trait.id === 'expense' || o.trait.id === 'chaotic' ? 'raid' : 'want'}" title="${o.trait.tip}">${o.trait.label}</span>` : ''}${o.flaked ? ' <span class="chip raid" title="They simply did not come in this month. Zero support delivered.">GHOSTING</span>' : ''}</div>
           <div class="pline dim">${o.role} · ${o.spec ? 'no scholar support' : `supports <b>${o.flaked ? 0 : (o.supports === undefined ? TUNE.supportRatio : o.supports)}</b>`} · ${fmtMoney(o.salary)}/mo</div>
           <div class="pline quirk">${o.quirk}</div>
-          <button class="btn tiny" data-act="fire" data-kind="ops" data-id="${o.id}">Let Go</button>
+          ${o.poach ? `<div class="pline poachline">⚠ <b>${o.poach.by}</b> is offering <b>${fmtMoney(o.poach.salary)}/mo</b> (now ${fmtMoney(o.salary)}). Decide before month's end:
+            <button class="btn tiny" data-act="matchops" data-id="${o.id}">Match</button>
+            <button class="btn tiny" data-act="releaseops" data-id="${o.id}">Let Them Walk</button></div>`
+          : `<button class="btn tiny" data-act="fire" data-kind="ops" data-id="${o.id}">Let Go</button>`}
         </div>
       </div>`);
   });
@@ -2706,8 +3037,8 @@ function renderPrograms() {
     const nextFocus = focus ? TAGS[(TAGS.indexOf(focus) + 1) % TAGS.length] : null;
     const focusLine = focus ? `<div class="pline">Sourcing focus: ${tagChip(focus)} <button class="btn tiny" data-act="progfocus" data-tag="${nextFocus}" title="Each cohort usually yields a junior ${focus} scholar; sometimes nobody, occasionally a star or a stray from another field">change ▸</button></div>` : '';
     const costLine = p.once
-      ? `${fmtMoney(p.once)} once${p.cost ? ` + ${fmtMoney(p.cost)}/mo upkeep` : ''}${p.inf ? ` · ✦ +${p.inf}/mo` : ''}`
-      : `${fmtMoney(p.cost)}/mo${p.inf ? ` · ✦ +${p.inf}/mo` : ' · produces nothing'}${fellowsNote}`;
+      ? `${fmtMoney(p.once)} once${p.cost ? ` + ${fmtMoney(p.cost)}/mo upkeep` : ''} · ${programBenefit(p)}`
+      : `${fmtMoney(p.cost)}/mo · ${programBenefit(p)}${fellowsNote}`;
     const button = p.once
       ? (on ? '<span class="chip on" title="Endowed in perpetuity — this cannot be shut down">PERMANENT</span>'
             : `<button class="btn tiny" data-act="prog" data-id="${p.id}" ${G.cash < p.once ? 'disabled' : ''}>Endow (${fmtMoney(p.once)})</button>`)
@@ -2726,8 +3057,23 @@ function renderPrograms() {
   }).join('');
 }
 
+// what a program actually buys you — money, a bonus, or the donors who demand it
+function programBenefit(p) {
+  const deck = DONORS.filter(d => d.demand && d.demand.type === 'PROGRAM' && d.demand.pid === p.id).length;
+  const mine = G.donors.filter(d => d.demand.type === 'PROGRAM' && d.demand.pid === p.id).length;
+  const parts = [];
+  if (p.inf) parts.push(`✦ +${p.inf}/mo`);
+  if (p.id === 'warroom') parts.push(`+${Math.round(TUNE.warroomBonus * 100)}% on every commit`);
+  if (p.id === 'fellows') parts.push(`a scholar cohort every ${TUNE.fellowsEvery} months`);
+  if (p.id === 'wing') parts.push('rent halved, forever');
+  if (p.id === 'chair') parts.push('permanent');
+  if (deck) parts.push(`demanded by ${deck} donor${deck > 1 ? 's' : ''} in the deck${mine ? ` (${mine} of yours)` : ''}`);
+  return parts.join(' · ') || 'prestige only';
+}
+
 function donorPFChips(d) {
   let s = '';
+  if (d.raidedFrom) s += ` <span class="chip" title="Lured away from ${d.raidedFrom}">ex-${d.raidedFrom}</span>`;
   if (d.perk && DONOR_PERKS[d.perk]) s += ` <span class="chip want" title="${DONOR_PERKS[d.perk].tip}">${DONOR_PERKS[d.perk].label}</span>`;
   if (d.flaw && DONOR_FLAWS[d.flaw]) s += ` <span class="chip raid" title="${DONOR_FLAWS[d.flaw].tip}">${DONOR_FLAWS[d.flaw].label}</span>`;
   if (d.whale) s += ` <span class="chip raid" title="${DONOR_FLAWS.whale.tip}">🐋 WHALE</span>`;
@@ -2748,7 +3094,10 @@ function renderMyDonors() {
             const cap = d.renewals ? 1 : TUNE.strikeLimit;
             return `<div class="pline dim">${d.renewals ? '<span class="chip want" title="Renewed relationship: stricter terms, and a single strike ends it">RENEWED</span> ' : ''}Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, cap - d.strikes))}${d.strikes === cap - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>`;
           })()}
-          ${d.lapsing ? `<div class="pline poachline">⌛ <b>Cycle over.</b> Renew for ✦${renewCost(d)} on stricter terms${d.demand.type === 'ENGAGE' ? ` (wants ✦${d.demand.amt + 5}/mo)` : d.demand.type === 'ROSTER' ? ' (wants 2 scholars)' : ''} — one strike ends a renewed deal — or let it lapse:
+          ${d.poach ? `<div class="pline poachline">⚠ <b>${d.poach.by}</b> is courting them. Re-cultivate for <b>✦${d.poach.cost}</b> or they defect at month's end:
+            <button class="btn tiny" data-act="recultivate" data-id="${d.id}" ${G.influence < d.poach.cost ? 'disabled' : ''}>Re-cultivate (✦${d.poach.cost})</button>
+            <button class="btn tiny" data-act="letgo" data-id="${d.id}">Let Them Go</button></div>`
+          : d.lapsing ? `<div class="pline poachline">⌛ <b>Cycle over.</b> Renew for ✦${renewCost(d)} on stricter terms${d.demand.type === 'ENGAGE' ? ` (wants ✦${d.demand.amt + 5}/mo)` : d.demand.type === 'ROSTER' ? ' (wants 2 scholars)' : ''} — one strike ends a renewed deal — or let it lapse:
             <button class="btn tiny" data-act="renew" data-id="${d.id}">Renew</button>
             <button class="btn tiny" data-act="lapse" data-id="${d.id}">Let Lapse</button></div>`
           : `<button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>`}
@@ -2791,7 +3140,11 @@ function renderFights() {
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
           <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
-          ${testimonyReady(f) ? `<div class="pline"><button class="btn tiny" data-act="testify" data-f="${fi}" title="Your best ${f.tag} scholar takes the stand for the side you back: success adds 1.5× their output; a flub costs a quarter of your stake and their pride.">📣 Testify: ${bestWitness(f.tag).name}</button></div>` : ''}
+          ${testimonyReady(f) ? (() => {
+            const w = bestWitness(f.tag), st = testifyStakes(f, w), pc = testifyPrepCost();
+            const p0 = Math.round(testifyOdds(w) * 100), p1 = Math.round(testifyOdds(w, true) * 100);
+            return `<div class="pline"><button class="btn tiny" data-act="testify" data-f="${fi}" title="${w.name} takes the stand for “${st.side.label}”: ${p0}% they command the room (+${st.gain} — 1.5× their output, or a tenth of the other side's pile, whichever is bigger); otherwise −${st.loss} (${Math.round(TUNE.testifyFlubPct * 100)}% of your stake, never more than their output) and a bruised ego.">📣 Testify: ${w.name} · ${p0}% for +${st.gain}, else −${st.loss}</button> <button class="btn tiny" data-act="testify" data-f="${fi}" data-prep="1" ${G.influence < pc ? 'disabled' : ''} title="Murder boards and a haircut: +${Math.round(TUNE.testifyPrepBonus * 100)}% odds${pc ? ` for ✦${pc}` : ' — free, your Comms Director runs prep'}">Prep & testify (${pc ? `✦${pc}, ` : ''}${p1}%)</button></div>`;
+          })() : ''}
           ${f.testimony ? `<div class="pline ${f.testimony.ok ? 'ok' : 'warn'}">📣 ${f.testimony.who} ${f.testimony.ok ? 'commanded the hearing room' : 'flubbed the hearing'}: ${f.testimony.eff > 0 ? '+' : ''}${f.testimony.eff}</div>` : ''}
           <div class="tug" title="Odds if it resolved right now. Influence ratios are sharpened (a 2:1 lead wins ~85%) — but the wire decides, and upsets happen."><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
@@ -2817,13 +3170,20 @@ function renderReport() {
   const seasonal = W.month >= TUNE.electionSeasonStart ? TUNE.electionSeasonMult : 1;
   const lbRows = standings().map((row, i) => {
     const rival = row.human ? null : W.rivals.find(r => r.short === row.short);
-    const budget = row.you ? `✦+${production()}` : rival ? `✦~${Math.round(rival.budget * seasonal)}` : '—';
+    const budget = row.you ? `✦+${production()}` : rival ? `✦~${Math.round(rival.budget * seasonal * rivalConfMult(rival))}` : '—';
+    const c = row.you ? (G.confidence === undefined ? TUNE.confStart : G.confidence) : rival ? rivalConf(rival) : row.conf;
+    const band = c === null || c === undefined ? null : confBand(c);
+    const gauge = band ? `<span class="minigauge" title="Donor confidence ${c} · ${band.label}${rival ? ` — spending ×${rivalConfMult(rival)}` : ''}"><i class="conffill ${band.id}" style="width:${c}%"></i></span>` : '';
+    const dents = rival && rival.dents && rival.dents.length ? `<span class="chip dent" title="${dentText(rival)}">💢${rival.dents.length}</span>` : '';
+    const vend = rival && vendettaAgainstMe(rival) ? `<span class="chip vend" title="Vendetta against you: twice the poaching of your scholars, donors and ops, plus whisper campaigns against your donor base">⚔</span>` : '';
+    const oppo = !row.you && !G.over ? `<button class="btn tiny oppo" data-act="oppo" data-target="${row.human ? row.pid : row.short}" title="Commission an oppo file on ${row.short} (✦${oppoCost()}, ${Math.round(oppoOdds() * 100)}% to land): their donor confidence ${TUNE.oppoHit}, or it blows back on yours (${TUNE.oppoBlowback}). One a month; each file costs ✦${TUNE.oppoStep} more than the last.${row.human ? '' : ' Either way they take it personally.'}" ${G.oppoMonth === W.month || G.influence < oppoCost() ? 'disabled' : ''}>📁</button>` : '';
     return `<tr class="${row.you ? 'you' : ''}">
       <td class="rank">${i + 1}</td>
       <td>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}${row.pname ? ` <span class="dim">· ${row.pname}</span>` : ''}${row.you ? (i === 0 && row.v > 0 ? ' ★ <span title="You lead the board: the whole town is spending harder and counter-bidding the sides you top.">🔥</span>' : ' ★') : (row.human && i === 0 && row.v > 0 ? ' 🔥' : '')}</td>
       <td>${leanChip(row.align)}</td>
       <td class="amt">${row.v}</td>
       <td class="amt dim">${budget}</td>
+      <td class="lbx">${gauge}${dents}${vend}${oppo}</td>
     </tr>`;
   }).join('');
   $('#reportBody').innerHTML = `
@@ -2853,7 +3213,7 @@ function renderReport() {
     })()}
     <div class="subdivider">LEADERBOARD — POLICY VICTORIES</div>
     <table class="ledger lb">
-      <tr class="lbhead"><td>#</td><td>TANK</td><td>LEAN</td><td class="amt">W</td><td class="amt">✦/mo</td></tr>
+      <tr class="lbhead"><td>#</td><td>TANK</td><td>LEAN</td><td class="amt">W</td><td class="amt">✦/mo</td><td title="Donor confidence · dents you've put in them · vendettas · the oppo file">BASE</td></tr>
       ${lbRows}
     </table>`;
 }
@@ -2909,7 +3269,7 @@ function renderDonorMarket() {
       <div class="cardbody mrow">
         ${iconImg('donor_' + d.id)}
         <div class="mcontent">
-          <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b> <span class="dim">· ${d.term === undefined ? 'no cycle' : d.term + ' mo cycle'}</span>${d.lead ? ' <span class="chip want" title="Won in a policy fight: half-price courtship">WARM INTRO</span>' : ''}${donorPFChips(d)}</div>
+          <div class="pline">${leanChip(d.lean)} <b>${fmtMoney(d.grant)}/mo</b> <span class="dim">· ${d.term === undefined ? 'no cycle' : d.term + ' mo cycle'}</span>${d.lead ? ' <span class="chip want" title="Won in a policy fight: half-price courtship">WARM INTRO</span>' : ''}${d.from ? ` <span class="chip vend" title="Currently funds ${d.from}. Courting them costs ${TUNE.donorRaidMult}× — ${d.fromPid ? `it's a bid: ${d.from} gets a month to re-cultivate them, and your influence is spent either way` : `${d.from}'s budget takes a permanent −${TUNE.donorRaidHit}, and they swear a vendetta: twice the poaching of your scholars, ops and donors, plus whisper campaigns, for the rest of the game`}.">⚔ FUNDS ${d.from.toUpperCase()}</span>` : ''}${donorPFChips(d)}</div>
           ${(() => { const def = DONORS.find(x => x.id === d.id); return def && def.requireText ? `<div class="pline ok" title="You currently qualify">🔑 ${def.requireText}</div>` : ''; })()}
           <div class="pline warn">Demands: ${demandText(d)}</div>
           <div class="pline quirk">${d.blurb}</div>
@@ -2945,7 +3305,12 @@ document.addEventListener('click', e => {
   else if (act === 'prospect') actProspect(b.dataset.kind);
   else if (act === 'progfocus') actProgFocus(b.dataset.tag);
   else if (act === 'crisischoice') actCrisis(+b.dataset.idx);
-  else if (act === 'testify') actTestify(+b.dataset.f);
+  else if (act === 'testify') actTestify(+b.dataset.f, b.dataset.prep === '1');
+  else if (act === 'recultivate') actRecultivate(b.dataset.id);
+  else if (act === 'letgo') actLetGo(b.dataset.id);
+  else if (act === 'matchops') actMatchOps(+b.dataset.id);
+  else if (act === 'releaseops') actReleaseOps(+b.dataset.id);
+  else if (act === 'oppo') actOppo(b.dataset.target);
   else if (act === 'returnsdone') { $('#returnsWin').classList.add('hidden'); showPaper(G.finalPaper || [], true); }
   else if (act === 'returnsskip') finishReturns();
 
@@ -2976,7 +3341,7 @@ document.addEventListener('click', e => {
 // renders the server's view and forwards actions. See README for the flow.
 const NET = { active: false, code: null, pid: null, token: null, monthSeq: -1, paperSeq: 0, timer: null, ended: false, host: false, shownResult: false };
 const NET_DEFAULT_URL = 'https://think-tank-tycoon.timhwang.workers.dev';
-const NET_ACTS = new Set(['hire', 'fire', 'court', 'drop', 'prog', 'progfocus', 'commit', 'prospect', 'renew', 'lapse', 'match', 'release', 'crisischoice', 'testify', 'serve', 'keep']);
+const NET_ACTS = new Set(['hire', 'fire', 'court', 'drop', 'prog', 'progfocus', 'commit', 'prospect', 'renew', 'lapse', 'match', 'release', 'crisischoice', 'testify', 'serve', 'keep', 'recultivate', 'letgo', 'matchops', 'releaseops', 'oppo']);
 
 function netUrl() { try { return localStorage.getItem('ttt-net-url') || NET_DEFAULT_URL; } catch (e) { return NET_DEFAULT_URL; } }
 function netSaveCreds() { try { localStorage.setItem('ttt-net', JSON.stringify({ code: NET.code, pid: NET.pid, token: NET.token })); } catch (e) {} }
@@ -3113,7 +3478,7 @@ async function netPoll() {
 
 async function netAction(type, ds) {
   if (NET.ended) return flash('You already ended this month — waiting on the others.');
-  const args = { idx: ds.idx, id: ds.id, kind: ds.kind, f: ds.f, s: ds.s, amt: ds.amt, tag: ds.tag };
+  const args = { idx: ds.idx, id: ds.id, kind: ds.kind, f: ds.f, s: ds.s, amt: ds.amt, tag: ds.tag, target: ds.target, prep: ds.prep };
   const v = await netCall(`/${NET.code}/action`, { type, args });
   if (v.error) flash(v.error);
   if (v.me) { netApplyView(v); render(); }
@@ -3281,7 +3646,12 @@ export function applyAction(world, pid, type, args) {
     case 'match': actMatch(n(a.id)); break;
     case 'release': actRelease(n(a.id)); break;
     case 'crisischoice': actCrisis(n(a.idx)); break;
-    case 'testify': actTestify(n(a.f)); break;
+    case 'testify': actTestify(n(a.f), a.prep === '1' || a.prep === true); break;
+    case 'recultivate': actRecultivate(a.id); break;
+    case 'letgo': actLetGo(a.id); break;
+    case 'matchops': actMatchOps(n(a.id)); break;
+    case 'releaseops': actReleaseOps(n(a.id)); break;
+    case 'oppo': actOppo(a.target); break;
     case 'serve': actServe(n(a.id)); break;
     case 'keep': actKeepScholar(n(a.id)); break;
     case 'progfocus': actProgFocus(a.tag); break;
@@ -3325,7 +3695,7 @@ export function resolveMonth(world) {
 
 export function viewFor(world, pid) {
   W = world; G = world.players.find(p => p.pid === pid);
-  const summaries = world.players.map(p => ({ pid: p.pid, name: p.name, tankId: p.tankId, v: p.stats.won, over: !!p.over }));
+  const summaries = world.players.map(p => ({ pid: p.pid, name: p.name, tankId: p.tankId, conf: p.confidence, v: p.stats.won, over: !!p.over }));
   return {
     me: G,
     world: { month: world.month, fights: world.fights, fightDeck: world.fightDeck, rivals: world.rivals,

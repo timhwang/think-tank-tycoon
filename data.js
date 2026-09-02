@@ -94,6 +94,29 @@ const TUNE = {
   poachChance: 0.12,     // monthly odds a rival makes a run at one of your scholars
   poachRivalGain: 3,     // rival budget gained when your scholar defects to them
   renewCostMult: 0.5,    // renewing an expiring donor costs this x fresh courting
+  // poaching, both directions; vendettas; attacks on donor confidence
+  donorPoachChance: 0.10, // monthly odds a rival makes a run at one of your donors
+  donorPoachRivalGain: 3, // rival budget gained when your donor defects to them
+  recultivateMult: 0.4,   // re-cultivating a courted donor costs this x fresh courting (halved by a Development Director)
+  confPoached: -10,       // confidence hit when a donor defects to a rival
+  donorRaidChance: 0.18,  // odds a market donor currently funds a rival (a raid)
+  donorRaidMult: 1.5,     // court-cost premium to raid a rival's donor
+  donorRaidHit: 3,        // rival budget lost per raided donor
+  vendettaMult: 2,        // poach attempts by a rival with a vendetta scale by this
+  opsPoachChance: 0.08,   // monthly odds (per grudge) a vendetta rival bids for one of your ops
+  whisperChance: 0.25,    // monthly odds a vendetta rival runs a whisper campaign
+  whisperHit: -5,         // confidence lost to a whisper campaign (halved by comms staff)
+  oppoBase: 20,           // influence to commission an oppo file...
+  oppoStep: 10,           // ...plus this per prior file
+  oppoOdds: 0.6,          // base odds the story lands (+15% Comms Director, +8% Comms Coordinator)
+  oppoHit: -12,           // target confidence lost when it lands
+  oppoBlowback: -8,       // your confidence lost when it backfires
+  rivalConfWin: 3,        // rival donor confidence per banked victory...
+  rivalConfLoss: -3,      // ...and per contested loss (a third or more of the losing pile)
+  testifyFlubPct: 0.15,   // a flub costs this share of your stake (never more than the witness's output)
+  testifyPileShare: 0.1,  // success adds at least this share of the opposing pile
+  testifyPrepCost: 10,    // influence to prep the witness (free with a Comms Director)
+  testifyPrepBonus: 0.15, // ...for this much extra odds
   startYear: 2027,
 };
 
@@ -575,7 +598,7 @@ const CRISES = [
   { id:'oped', title:'THE OLD OP-EDS SURFACE',
     body:'A viral thread unearths {SCHOLAR}’s spicier collected works. Donors are calling. The interns have made a supercut.',
     choices: [
-      { label:'Stand by them', hint:'Ideologically offended donors each take a strike' },
+      { label:'Stand by them', hint:'{OFFENDED}' },
       { label:'Quietly part ways', hint:'{SCHOLAR} leaves. No severance, no statement' },
       { label:'Damage-control blitz', inf:40, hint:'✦40, and by Friday it never happened' },
     ] },
@@ -634,7 +657,7 @@ const CRISES = [
     body:'{RIVAL} has funded a “transparency project” about you. Its first report is unflattering and, worse, well-designed.',
     choices: [
       { label:'Stay above the fray', hint:'Your standing commitments on every fight erode 20%' },
-      { label:'Counter-oppo', cash:50, hint:'{RIVAL}’s influence budget takes a permanent −3' },
+      { label:'Counter-oppo', cash:50, hint:'{RIVAL}’s budget takes a permanent −3 and their donors get nervous (confidence −10)' },
     ] },
   { id:'center', title:'{DONOR} WANTS A CENTER',
     body:'{DONOR} would like their name on something. Specifically: a Center. There would be a plaque, and a ribbon, and remarks.',
@@ -645,8 +668,8 @@ const CRISES = [
   { id:'endorse', title:'PRIMARY SEASON: A CAMPAIGN WANTS YOUR NAME', scripted:true,
     body:'It is March 2028 and a presidential campaign would like your institution on a letter. Another campaign has heard about the letter.',
     choices: [
-      { label:'Endorse the frontrunner', hint:'+✦40 of relevance; donors across the aisle from you take a strike' },
-      { label:'Endorse the insurgent', hint:'+✦25, and one nervous donor takes a strike' },
+      { label:'Endorse the frontrunner', hint:'+✦40 of relevance; {AISLE}' },
+      { label:'Endorse the insurgent', hint:'+✦25; {NERVOUS}' },
       { label:'Stay above it', hint:'Donor confidence +4. Nobody remembers who stayed above it' },
     ] },
   { id:'union', title:'THE INTERNS UNIONIZE',
@@ -668,19 +691,33 @@ const CALENDAR = { 1:'sotu', 7:'august', 10:'offyear', 13:'sotu', 14:'primaries'
 const CALENDAR_LABEL = { sotu:'SOTU', august:'RECESS', primaries:'PRIMARIES' };
 
 // Rival institutions doing rival things (flavor; {RIVAL} substituted)
+// titles earned on Election Night, with badge icons for the report card
+const BADGES = {
+  sandbagger: { icon:'badge_sandbagger', label:'THE SANDBAGGER', desc:'won from behind' },
+  amateur:    { icon:'badge_amateur',    label:'AMATEUR HOUR',    desc:'lost twice outside your lanes' },
+  diva:       { icon:'badge_diva',       label:'DIVA WHISPERER',  desc:'finished with a diva on staff' },
+  landlord:   { icon:'badge_landlord',   label:'LANDLORD',        desc:'bought the annex' },
+  revolving:  { icon:'badge_revolving',  label:'REVOLVING DOOR',  desc:'two or more scholars in government' },
+  iron:       { icon:'badge_iron',       label:'IRON DEVELOPMENT', desc:'donor confidence never dipped below 60' },
+  wire:       { icon:'badge_wire',       label:'THE WIRE HATES YOU', desc:'lost two fights as a 75%+ favorite' },
+  crisis:     { icon:'badge_crisis',     label:'CRISIS MANAGER',  desc:'four crises, base intact' },
+  oppo:       { icon:'badge_oppo',       label:'DIRTY TRICKSTER', desc:'three oppo files landed' },
+  raider:     { icon:'badge_raider',     label:'THE RAIDER',      desc:'poached three scholars or donors from rivals' },
+};
+
 const RIVAL_MOVES = [
-  { h:'{RIVAL} POACHES A BIG NAME', s:'The announcement calls it “a homecoming.” It is a raise.' },
+  { conf:3, h:'{RIVAL} POACHES A BIG NAME', s:'The announcement calls it “a homecoming.” It is a raise.' },
   { h:'{RIVAL} PUBLISHES 400-PAGE REPORT NOBODY REQUESTED', s:'The executive summary is eleven pages. The executive summary of the executive summary is forthcoming.' },
-  { h:'{RIVAL} GALA RAISES MILLIONS, EYEBROWS', s:'The ice sculpture was of the donor.' },
-  { h:'{RIVAL} FELLOW GOES VIRAL FOR THE WRONG REASONS', s:'The thread has been deleted. The screenshots have not.' },
+  { conf:4, h:'{RIVAL} GALA RAISES MILLIONS, EYEBROWS', s:'The ice sculpture was of the donor.' },
+  { conf:-5, h:'{RIVAL} FELLOW GOES VIRAL FOR THE WRONG REASONS', s:'The thread has been deleted. The screenshots have not.' },
   { h:'{RIVAL} LAUNCHES PODCAST', s:'Episode one: “Why We Launched a Podcast.”' },
-  { h:'{RIVAL} REBRANDS; LOGO NOW A DIFFERENT SHADE OF NAVY', s:'Consultants describe the shade as “forward-leaning.”' },
-  { h:'{RIVAL} OPENS “CENTER FOR THE FUTURE OF THINGS”', s:'Staffed by two fellows and a very good intern.' },
-  { h:'{RIVAL} PRESIDENT TESTIFIES, MOSTLY ABOUT THE OTHER PANELIST', s:'Members thanked the witness for their candor and asked the other guy a question.' },
-  { h:'{RIVAL} ANNOUNCES STRATEGIC PLAN THROUGH 2040', s:'Page one is a mission statement. Page two is also a mission statement.' },
+  { conf:-2, h:'{RIVAL} REBRANDS; LOGO NOW A DIFFERENT SHADE OF NAVY', s:'Consultants describe the shade as “forward-leaning.”' },
+  { conf:2, h:'{RIVAL} OPENS “CENTER FOR THE FUTURE OF THINGS”', s:'Staffed by two fellows and a very good intern.' },
+  { conf:-3, h:'{RIVAL} PRESIDENT TESTIFIES, MOSTLY ABOUT THE OTHER PANELIST', s:'Members thanked the witness for their candor and asked the other guy a question.' },
+  { conf:2, h:'{RIVAL} ANNOUNCES STRATEGIC PLAN THROUGH 2040', s:'Page one is a mission statement. Page two is also a mission statement.' },
   { h:'{RIVAL} HOSTS PANEL ON PANELS', s:'Q&A ran long. The question was a comment.' },
-  { h:'{RIVAL} DONOR DINNER ENDS IN “VIGOROUS EXCHANGE”', s:'A fork was raised. Not thrown — raised.' },
-  { h:'{RIVAL} INTERNS FORM SLACK CHANNEL, SEIZE MEANS OF SCHEDULING', s:'Leadership has been informed via calendar invite.' },
+  { conf:-5, h:'{RIVAL} DONOR DINNER ENDS IN “VIGOROUS EXCHANGE”', s:'A fork was raised. Not thrown — raised.' },
+  { conf:-2, h:'{RIVAL} INTERNS FORM SLACK CHANNEL, SEIZE MEANS OF SCHEDULING', s:'Leadership has been informed via calendar invite.' },
 ];
 
 // No-effect Bugle items for slow news months: wonk life plus the three

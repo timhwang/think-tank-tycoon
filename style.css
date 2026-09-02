@@ -572,3 +572,16 @@ body {
   .shopgrid { grid-template-columns: 1fr; }
 }
 
+
+/* ---------- rivalry: leaderboard extras, raids, the report card ---------- */
+.chip.dent { background: #d4a0a0; border-color: #7a2020; font-weight: bold; cursor: help; }
+.chip.vend { background: #2b2b2b; color: #f4d35e; border-color: #000; font-weight: bold; cursor: help; }
+.minigauge { display: inline-block; width: 34px; height: 7px; border: 1px solid #333; background: #cfc9b0; vertical-align: middle; margin-right: 3px; cursor: help; }
+.minigauge i { display: block; height: 100%; }
+.lbx { white-space: nowrap; }
+.btn.tiny.oppo { padding: 0 3px; font-size: 10px; line-height: 14px; margin-left: 2px; }
+.recapgrid, .badgegrid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.recapcell, .badge { width: 120px; text-align: center; font-family: Verdana, Geneva, sans-serif; }
+.recapcell .icon.lg, .badge .icon.lg { width: 40px; height: 40px; }
+.rc-title { font-size: 10px; font-weight: bold; line-height: 1.2; margin-top: 2px; }
+.rc-sub { font-size: 9px; color: #444; line-height: 1.25; }
