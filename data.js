@@ -33,10 +33,19 @@ const TUNE = {
   grantTermMax: 20,      // ...to this many, then the donor departs amicably
   grantMult: 0.8,        // global scaler on donor grants (applied when courted)
   fightCashMult: 0.7,    // global scaler on fight cash rewards (applied at draw)
-  rivalBudgetMult: 0.8,  // global scaler on rival influence budgets
+  rivalBudgetMult: 0.82, // global scaler on rival influence budgets
   courtCostMult: 1.5,    // global scaler on donor courting costs
   scholarOutMult: 1,     // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
+  prospectHireCost: 50,  // cash to sweep the hiring market and deal fresh cards
+  prospectDonorCost: 50, // cash to re-deal the donor market (a cultivation dinner)
+  divaChance: 0.08,      // odds a market scholar is a brilliant nightmare
+  divaQuitChance: 0.12,  // monthly odds each diva drives a colleague out
+  opsBoonChance: 0.28,   // odds an ops hire carries a bonus trait
+  opsFlawChance: 0.15,   // odds an ops hire carries a deficit instead
+  poachChance: 0.12,     // monthly odds a rival makes a run at one of your scholars
+  poachRivalGain: 3,     // rival budget gained when your scholar defects to them
+  renewCostMult: 0.5,    // renewing an expiring donor costs this x fresh courting
   startYear: 2027,
 };
 
@@ -204,6 +213,7 @@ const DONORS = [
 // ------------------------------------------------------------
 // Programs: money sinks that satisfy donor demands. Bloat with a purpose.
 // ------------------------------------------------------------
+// once: a one-time price; the program is then permanent (cost = upkeep).
 const PROGRAMS = [
   { id:'gala', name:'Annual Gala Series', cost:10, inf:0,
     blurb:'An ice sculpture of the Capitol, melting onto the raw bar.' },
@@ -211,6 +221,16 @@ const PROGRAMS = [
     blurb:'Episode 44: “So, Walk Me Through the Paper.”' },
   { id:'lobby', name:'Marble Lobby & Donor Wall', cost:8, inf:0,
     blurb:'Names engraved in order of generosity.' },
+  { id:'journal', name:'House Policy Journal', cost:12, inf:5,
+    blurb:'Peer-reviewed by whoever is in the kitchenette.' },
+  { id:'warroom', name:'The War Room', cost:10, inf:0,
+    blurb:'A map, some string, unlimited pushpins. All fight commits +10%.' },
+  { id:'fellows', name:'Junior Fellows Program', cost:12, inf:0,
+    blurb:'They are all named Tyler. Every sixth month, one becomes a real scholar.' },
+  { id:'chair', name:'Endowed Chair in Applied Foresight', once:400, cost:4, inf:8,
+    blurb:'Named for the donor’s late opinions. Permanent, prestigious, productive.' },
+  { id:'wing', name:'The West Annex', once:500, cost:0, inf:0,
+    blurb:'Owning your floor beats renting four of them. Rent halved, forever.' },
 ];
 
 // ------------------------------------------------------------

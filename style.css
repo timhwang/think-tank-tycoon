@@ -180,6 +180,7 @@ body {
 .chip.want { background: #e8d47a; border-color: var(--gold); }
 .chip.gold { background: #e8d47a; border-color: var(--gold); font-weight: bold; }
 .chip.raid { background: #d4a0a0; border-color: #7a2020; font-weight: bold; }
+.chip.diva { background: #e8b06a; border-color: #a04a00; font-weight: bold; }
 
 .tag { display: inline-block; font-size: 9px; font-weight: bold; color: #fff; padding: 0 4px; border: 1px solid #0006; }
 .tag-TAX { background: #8a6d00; }
@@ -213,6 +214,14 @@ body {
 .pcontent { flex: 1; min-width: 0; }
 .pline { margin: 1px 0; }
 .quirk { font-style: italic; color: #3a3a3a; font-size: 10px; }
+.poachline {
+  background: #e8d9a0;
+  border: 1px solid var(--gold);
+  padding: 3px 5px;
+  margin-top: 3px;
+  font-size: 10px;
+}
+.poachline .btn { margin-top: 2px; }
 .subdivider {
   font-family: 'Silkscreen', Verdana, sans-serif;
   font-size: 8px;
@@ -259,14 +268,17 @@ body {
 
 .tug {
   height: 10px;
-  background: #9b1414;
+  background: #7d5fa8;
   border: 2px solid;
   border-top-color: var(--win-dkr); border-left-color: var(--win-dkr);
   border-right-color: var(--win-lt); border-bottom-color: var(--win-lt);
   margin: 2px 0 4px 0;
   position: relative;
 }
-.tugA { height: 100%; background: #14329b; border-right: 2px solid #fff; }
+.tugA { height: 100%; background: #d99a1f; border-right: 2px solid #fff; }
+.sidemark { font-weight: bold; cursor: help; }
+.sidemark.a { color: #a86f00; }
+.sidemark.b { color: #6a4c96; }
 
 .sideline {
   display: flex;

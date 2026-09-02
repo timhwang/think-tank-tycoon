@@ -52,16 +52,17 @@ function genScholar(starter) {
   const salary = starter ? ri(16, 30) : ri(14, 42);
   let out = Math.round((salary * 0.45 + ri(0, 8)) * TUNE.scholarOutMult);
   let name = genName(Math.random() < 0.75);
-  let big = false;
-  if (!starter && Math.random() < 0.12) { big = true; out += 10; }
+  let big = false, diva = false;
+  if (!starter && Math.random() < TUNE.divaChance) { diva = true; out += ri(14, 20); }
+  else if (!starter && Math.random() < 0.12) { big = true; out += 10; }
   // starters mostly share the shop's politics; the open market is a grab bag
   const tSign = Math.sign(tank().align);
   const r = Math.random();
   const lean = starter ? ((tSign !== 0 && r < 0.6) ? tSign : 0)
                        : (r < 0.3 ? -1 : r < 0.7 ? 0 : 1);
   const sch = {
-    id: uid++, kind: 'scholar', name, big, lean,
-    tag: pick(TAGS), salary: salary + (big ? 15 : 0), out,
+    id: uid++, kind: 'scholar', name, big, lean, diva,
+    tag: pick(TAGS), salary: salary + (big ? 15 : 0) + (diva ? ri(10, 16) : 0), out,
     quirk: pick(SCHOLAR_QUIRKS),
     icon: 'scholar_' + ri(1, 12),
   };
@@ -74,11 +75,28 @@ function genScholar(starter) {
   return sch;
 }
 
-function genOps() {
+const OPS_TRAITS = [
+  { id:'inf',     label:'MEDIA SAVVY',  tip:'Their booking instincts add +2 ✦/mo to production.' },
+  { id:'grants',  label:'RAINMAKER',    tip:'Works the phones: +$6k/mo in extra grants while employed.' },
+  { id:'court',   label:'CONNECTOR',    tip:'Knows everyone: donor courting costs −10% while employed.' },
+  { id:'expense', label:'EXPENSIVE',    tip:'Runs a lavish office: +$6k/mo in miscellaneous costs.' },
+];
+
+function genOps(starter) {
   const rIdx = Math.floor(Math.random() * OPS_ROLES.length);
+  const r = Math.random();
+  // starters are dependable generalists so every opening roster is supported
+  const supports = starter ? TUNE.supportRatio : (r < 0.2 ? 1 : r < 0.75 ? 2 : 3);
+  let salary = 3 + supports * 4 + ri(0, 3);
+  let trait = null;
+  const t = Math.random();
+  if (!starter) {
+    if (t < TUNE.opsBoonChance) { trait = pick(OPS_TRAITS.slice(0, 3)); salary += 2; }
+    else if (t < TUNE.opsBoonChance + TUNE.opsFlawChance) { trait = OPS_TRAITS[3]; salary = Math.max(5, salary - 2); }
+  }
   return {
     id: uid++, kind: 'ops', name: genName(false),
-    role: OPS_ROLES[rIdx], salary: ri(7, 12), supports: TUNE.supportRatio,
+    role: OPS_ROLES[rIdx], salary, supports, trait,
     quirk: pick(OPS_QUIRKS),
     icon: 'ops_' + (rIdx + 1),
   };
@@ -148,12 +166,12 @@ function newGame(tankId) {
     fightDeck: shuffle(FIGHTS.map(f => f.id)),
     donorDeck: shuffle(DONORS.map(d => d.id).filter(id => !t.donors.includes(id))),
     rivals: buildRivals(tankId),
-    log: [], negStreak: 0, over: false, monthCommits: {}, v: 2,
+    log: [], negStreak: 0, over: false, monthCommits: {}, progMonths: {}, v: 2,
     stats: { months: 0, won: 0, lost: 0, peakCash: t.cash },
   };
   PROGRAMS.forEach(p => G.programs[p.id] = false);
   for (let i = 0; i < t.scholars; i++) G.scholars.push(genScholar(true));
-  for (let i = 0; i < t.ops; i++) G.ops.push(genOps());
+  for (let i = 0; i < t.ops; i++) G.ops.push(genOps(true));
   t.donors.forEach(id => G.donors.push(mkDonorInstance(id)));
   while (G.fights.length < TUNE.fightSlots) drawFight();
   while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
@@ -165,20 +183,25 @@ function newGame(tankId) {
 }
 
 // ---------- derived numbers ----------
-function supportCap() { return G.ops.length * TUNE.supportRatio; }
+function supportCap() { return G.ops.reduce((a, o) => a + (o.supports || TUNE.supportRatio), 0); }
 
 function production() {
   const cap = supportCap();
   let sum = 0;
   G.scholars.forEach((s, i) => { sum += i < cap ? s.out : Math.floor(s.out * TUNE.unsupportedMult); });
   PROGRAMS.forEach(p => { if (G.programs[p.id]) sum += p.inf; });
+  G.ops.forEach(o => { if (o.trait && o.trait.id === 'inf') sum += 2; });
   return sum;
+}
+
+function opsGrantBonus() {
+  return G.ops.reduce((a, o) => a + (o.trait && o.trait.id === 'grants' ? 6 : 0), 0);
 }
 
 function payrollCost() {
   let c = 0;
   G.scholars.forEach(s => c += s.salary);
-  G.ops.forEach(o => c += o.salary);
+  G.ops.forEach(o => c += o.salary + (o.trait && o.trait.id === 'expense' ? 6 : 0));
   return c;
 }
 
@@ -188,14 +211,16 @@ function programsCost() {
   return c;
 }
 
-function monthlyCosts() { return tank().rent + payrollCost() + programsCost(); }
+function effectiveRent() { return Math.round(tank().rent * (G.programs.wing ? 0.5 : 1)); }
 
-function monthlyGrants() { return G.donors.reduce((a, d) => a + d.grant, 0); }
+function monthlyCosts() { return effectiveRent() + payrollCost() + programsCost(); }
+
+function monthlyGrants() { return G.donors.reduce((a, d) => a + d.grant, 0) + opsGrantBonus(); }
 
 // ---------- demands ----------
 function demandText(d) {
   const dm = d.demand;
-  if (dm.type === 'ROSTER') return `Wants a ${dm.tag} scholar on staff`;
+  if (dm.type === 'ROSTER') return (dm.count || 1) > 1 ? `Wants ${dm.count} ${dm.tag} scholars on staff` : `Wants a ${dm.tag} scholar on staff`;
   if (dm.type === 'PROGRAM') return `Wants the ${PROGRAMS.find(p => p.id === dm.pid).name} running`;
   if (dm.type === 'ENGAGE') return `Wants ✦${dm.amt}/mo pushed into ${dm.tag} fights`;
   if (dm.type === 'NOCROSS') {
@@ -207,7 +232,7 @@ function demandText(d) {
 
 function demandMet(d) {
   const dm = d.demand;
-  if (dm.type === 'ROSTER') return G.scholars.some(s => s.tag === dm.tag);
+  if (dm.type === 'ROSTER') return G.scholars.filter(s => s.tag === dm.tag).length >= (dm.count || 1);
   if (dm.type === 'PROGRAM') return !!G.programs[dm.pid];
   if (dm.type === 'ENGAGE') {
     const pushed = (G.monthCommits || {})[dm.tag] || 0;
@@ -250,7 +275,8 @@ function hireBonus(h) {
 }
 
 function courtCost(d) {
-  return Math.ceil(d.cost * TUNE.courtCostMult * fitMult(d.lean, 'donor'));
+  const connector = G.ops.some(o => o.trait && o.trait.id === 'court') ? 0.9 : 1;
+  return Math.ceil(d.cost * TUNE.courtCostMult * connector * fitMult(d.lean, 'donor'));
 }
 
 // visible tip when the player's politics move a price: "▼ −50%", with the
@@ -281,7 +307,8 @@ function fitTipDonor(d) {
 // matching scholars amplify influence committed to a fight of their tag
 function expertiseMult(tag) {
   const n = G.scholars.filter(s => s.tag === tag).length;
-  return 1 + Math.min(TUNE.expertiseCap, TUNE.expertisePerScholar * n);
+  return 1 + Math.min(TUNE.expertiseCap, TUNE.expertisePerScholar * n)
+       + (G.programs.warroom ? 0.1 : 0);
 }
 
 // rewards were plain cash numbers in early saves; normalize
@@ -300,6 +327,17 @@ function rewardText(f) {
   if (r.special === 'donorlead') parts.push('🤝 intro');
   if (r.special === 'absolve') parts.push('😇 amnesty');
   return parts.join(' + ') || '—';
+}
+
+function rewardTip(f) {
+  const r = fightReward(f);
+  const parts = [];
+  if (r.cash) parts.push(`${fmtMoney(r.cash)} in grants, scaled by your share of the winning side`);
+  if (r.inf) parts.push(`✦${r.inf} of clout, share-scaled`);
+  if (r.special === 'scholar') parts.push('🎓 a grateful expert joins your roster free');
+  if (r.special === 'donorlead') parts.push('🤝 warm intro: a donor appears in the market at half courting cost');
+  if (r.special === 'absolve') parts.push('😇 amnesty: every current donor\'s strikes drop by 1');
+  return 'If your side wins: ' + parts.join(' · ') + '. The victory itself goes to the side\'s single top contributor.';
 }
 
 // ---------- player actions ----------
@@ -361,8 +399,84 @@ function actDrop(id) {
 
 function actProgram(pid) {
   const p = PROGRAMS.find(x => x.id === pid);
+  if (p.once) {
+    if (G.programs[pid]) return; // permanent — no takebacks
+    if (G.cash < p.once) return flash(`${p.name} takes ${fmtMoney(p.once)} up front. You don't have it.`);
+    if (!confirm(`Commit ${fmtMoney(p.once)} to the ${p.name}? This is permanent.`)) return;
+    G.cash -= p.once;
+    G.programs[pid] = true;
+    logLine(`${p.name}: endowed for ${fmtMoney(p.once)}. Forever is a long time in this town.`);
+    save(); render();
+    return;
+  }
   G.programs[pid] = !G.programs[pid];
   logLine(G.programs[pid] ? `Launched the ${p.name} (${fmtMoney(p.cost)}/mo).` : `Quietly shut down the ${p.name}.`);
+  save(); render();
+}
+
+// sweep a stale market and deal fresh cards
+function actProspect(kind) {
+  const cost = kind === 'hire' ? TUNE.prospectHireCost : TUNE.prospectDonorCost;
+  if (G.cash < cost) return flash(`Prospecting costs ${fmtMoney(cost)}. You don't have it.`);
+  G.cash -= cost;
+  if (kind === 'hire') {
+    G.hireMarket = [];
+    while (G.hireMarket.length < TUNE.hireSlots) drawHire();
+    logLine(`Paid a headhunter ${fmtMoney(cost)} to sweep the hiring market.`);
+  } else {
+    G.donorMarket.forEach(d => G.donorDeck.unshift(d.id));
+    G.donorMarket = [];
+    while (G.donorMarket.length < TUNE.donorSlots && drawDonorToMarket()) {}
+    logLine(`Hosted a ${fmtMoney(cost)} cultivation dinner; a fresh crop of donors sniffs around.`);
+  }
+  save(); render();
+}
+
+// renew an expiring donor on stricter terms, or let them lapse
+function actRenew(id) {
+  const d = G.donors.find(x => x.id === id);
+  if (!d || !d.lapsing) return;
+  const cost = Math.ceil(courtCost(d) * TUNE.renewCostMult);
+  if (G.influence < cost) return flash(`Renewal takes ✦${cost}. You have ${G.influence}.`);
+  G.influence -= cost;
+  d.lapsing = false;
+  d.joined = G.month;
+  d.term = ri(TUNE.grantTermMin, TUNE.grantTermMax);
+  d.renewals = (d.renewals || 0) + 1;
+  if (d.demand.type === 'ENGAGE') d.demand.amt += 5;
+  if (d.demand.type === 'ROSTER') d.demand.count = 2;
+  d.strikes = 0;
+  logLine(`Renewed ${d.name} for ${d.term} months (✦${cost}). Terms are stricter — one strike now ends it.`);
+  save(); render();
+}
+
+function actLapse(id) {
+  const d = G.donors.find(x => x.id === id);
+  if (!d || !d.lapsing) return;
+  G.donors = G.donors.filter(x => x !== d);
+  G.donorDeck.unshift(d.id);
+  logLine(`Let ${d.name}'s grant lapse. The thank-you note was gracious and final.`);
+  save(); render();
+}
+
+// a rival made your scholar a better offer
+function actMatch(id) {
+  const s = G.scholars.find(x => x.id === id);
+  if (!s || !s.poach) return;
+  if (!confirm(`Match ${s.poach.by}'s offer? ${s.name}'s salary rises to ${fmtMoney(s.poach.salary)}/mo, permanently.`)) return;
+  s.salary = s.poach.salary;
+  logLine(`Matched the offer: ${s.name} stays at ${fmtMoney(s.salary)}/mo. ${s.poach.by} shrugs.`);
+  delete s.poach;
+  save(); render();
+}
+
+function actRelease(id) {
+  const s = G.scholars.find(x => x.id === id);
+  if (!s || !s.poach) return;
+  const r = G.rivals.find(x => x.short === s.poach.by);
+  if (r) r.budget += TUNE.poachRivalGain;
+  G.scholars = G.scholars.filter(x => x !== s);
+  logLine(`Let ${s.name} walk to ${s.poach.by}. Their budget swells to ~${r ? r.budget : '?'}/mo.`);
   save(); render();
 }
 
@@ -444,23 +558,33 @@ function endMonth() {
   const grants = monthlyGrants();
   G.cash += grants;
 
-  // 4.5 grant cycles sunset (they pay their final month first)
-  const expired = G.donors.filter(d => d.term !== undefined && G.month - d.joined >= d.term - 1);
-  expired.forEach(d => {
-    news.push({ h: `${d.name.toUpperCase()} GRANT CYCLE CONCLUDES`, s: `${fmtMoney(d.grant)}/mo sunsets on schedule after ${d.term} months. “Do stay in touch,” they say, warmly, leaving.` });
-    logLine(`${d.name}'s grant cycle ended (${d.term} months). Court them again someday.`);
-    G.donorDeck.unshift(d.id);
-  });
-  G.donors = G.donors.filter(d => !expired.includes(d));
-
-  // 5. donor demands checked
+  // 4.5 grant cycles sunset — one month of grace to renew on stricter terms
+  const gone = [];
   G.donors.forEach(d => {
-    if (!demandMet(d)) {
-      d.strikes++;
-      logLine(`${d.name}: demand unmet (${demandText(d)}). Strike ${d.strikes}/${TUNE.strikeLimit}.`);
+    if (d.lapsing) {
+      gone.push(d); // grace month passed unanswered
+      news.push({ h: `${d.name.toUpperCase()} MOVES ON`, s: `The renewal window closed. ${fmtMoney(d.grant)}/mo departs with a warm note and a colder mailing-list removal.` });
+      logLine(`${d.name} lapsed — no renewal. ${fmtMoney(d.grant)}/mo gone.`);
+      G.donorDeck.unshift(d.id);
+    } else if (d.term !== undefined && G.month - d.joined >= d.term - 1) {
+      d.lapsing = true;
+      news.push({ h: `${d.name.toUpperCase()} GRANT CYCLE ENDING`, s: `Renew within the month — on stricter terms, for ✦${Math.ceil(courtCost(d) * TUNE.renewCostMult)} — or the ${fmtMoney(d.grant)}/mo sunsets.` });
+      logLine(`${d.name}'s cycle is ending: renew (stricter terms) or let it lapse.`);
     }
   });
-  const leaving = G.donors.filter(d => d.strikes >= TUNE.strikeLimit);
+  G.donors = G.donors.filter(d => !gone.includes(d));
+
+  // 5. donor demands checked (renewed donors tolerate only one strike;
+  //    lapsing donors are already out the door and don't bother striking)
+  const strikeCap = d => (d.renewals ? 1 : TUNE.strikeLimit);
+  G.donors.forEach(d => {
+    if (d.lapsing) return;
+    if (!demandMet(d)) {
+      d.strikes++;
+      logLine(`${d.name}: demand unmet (${demandText(d)}). Strike ${d.strikes}/${strikeCap(d)}.`);
+    }
+  });
+  const leaving = G.donors.filter(d => !d.lapsing && d.strikes >= strikeCap(d));
   leaving.forEach(d => {
     news.push({ h: `${d.name.toUpperCase()} PULLS FUNDING`, s: `“We wish the institution well,” says statement that does not wish the institution well. ${fmtMoney(d.grant)}/mo, gone.` });
     logLine(`${d.name} walks. ${fmtMoney(d.grant)}/mo, gone.`);
@@ -486,6 +610,51 @@ function endMonth() {
       news.push({ h: `${s.name.toUpperCase()} QUITS, CITING “LACK OF INSTITUTIONAL SUPPORT”`, s: 'Storms out of a building they were never given keys to. Effective immediately.' });
       logLine(`${s.name} quits — ${TUNE.scholarStrikeLimit} straight months without ops support.`);
     });
+  }
+
+  // 6.52 divas drive colleagues out
+  G.scholars.filter(s => s.diva).forEach(diva => {
+    if (Math.random() >= TUNE.divaQuitChance) return;
+    const others = [...G.scholars.filter(s => s !== diva), ...G.ops];
+    if (!others.length) return;
+    const v = pick(others);
+    if (v.kind === 'scholar') G.scholars = G.scholars.filter(x => x !== v);
+    else G.ops = G.ops.filter(x => x !== v);
+    news.push({ h: `${v.name.toUpperCase()} RESIGNS, CITING “CREATIVE DIFFERENCES” WITH ${diva.name.toUpperCase()}`, s: 'Colleagues describe the difference as “one of them is impossible.” The impossible one stays.' });
+    logLine(`${v.name} quit over ${diva.name}. The diva's output remains excellent.`);
+  });
+
+  // 6.53 junior fellows pipeline: every 6th active month, one becomes real
+  if (G.programs.fellows) {
+    G.progMonths = G.progMonths || {};
+    G.progMonths.fellows = (G.progMonths.fellows || 0) + 1;
+    if (G.progMonths.fellows % 6 === 0) {
+      const jr = genScholar(true);
+      jr.salary = ri(10, 14); jr.out = ri(8, 12); jr.big = false; jr.diva = false;
+      jr.quirk = 'Was, until recently, named Tyler.';
+      G.scholars.push(jr);
+      news.push({ h: `JUNIOR FELLOW ${jr.name.toUpperCase()} PROMOTED TO ACTUAL SCHOLAR`, s: `${TAG_NAMES[jr.tag]}, ✦${jr.out}/mo, ${fmtMoney(jr.salary)}/mo. The program yields again.` });
+      logLine(`Junior Fellows Program graduates ${jr.name} (${TAG_NAMES[jr.tag]}).`);
+    }
+  }
+
+  // 6.55 unresolved poach bids: the scholar takes the offer
+  G.scholars.filter(s => s.poach && s.poach.deadline <= G.month).forEach(s => {
+    const r = G.rivals.find(x => x.short === s.poach.by);
+    if (r) r.budget += TUNE.poachRivalGain;
+    G.scholars = G.scholars.filter(x => x !== s);
+    news.push({ h: `${s.name.toUpperCase()} DEFECTS TO ${s.poach.by.toUpperCase()}`, s: `The offer sat unanswered. Their new business cards are already printed.` });
+    logLine(`${s.name} defected to ${s.poach.by} — the bid went unmatched.`);
+  });
+
+  // 6.56 a rival makes a run at one of your scholars
+  if (G.scholars.length >= 2 && !G.scholars.some(s => s.poach) && Math.random() < TUNE.poachChance) {
+    const target = pick([...G.scholars].sort((a, b) => b.out - a.out).slice(0, 3));
+    const rival = pick(G.rivals);
+    const offer = Math.ceil(target.salary * (1 + ri(25, 40) / 100));
+    target.poach = { by: rival.short, salary: offer, deadline: G.month + 1 };
+    news.push({ h: `${rival.short.toUpperCase()} MAKES A RUN AT ${target.name.toUpperCase()}`, s: `They're offering ${fmtMoney(offer)}/mo (currently ${fmtMoney(target.salary)}). Match it from the staff panel, or lose them next month.` });
+    logLine(`${rival.short} is courting ${target.name} at ${fmtMoney(offer)}/mo — match or let them walk.`);
   }
 
   // 6.6 annual reviews: every December, payroll ratchets up
@@ -707,6 +876,10 @@ function render() {
   $('#tbInf').innerHTML = `✦ ${G.influence} <span class="dim">(+${production()}/mo)</span>`;
   $('#tbStaff').textContent = `${G.scholars.length} scholars / ${cap} supported`;
 
+  const ph = $('#prospectHireBtn'), pd = $('#prospectDonorBtn');
+  if (ph) { ph.textContent = `PROSPECT (${fmtMoney(TUNE.prospectHireCost)})`; ph.disabled = G.cash < TUNE.prospectHireCost; }
+  if (pd) { pd.textContent = `PROSPECT (${fmtMoney(TUNE.prospectDonorCost)})`; pd.disabled = G.cash < TUNE.prospectDonorCost; }
+
   renderFights();
   renderHireMarket();
   renderDonorMarket();
@@ -726,12 +899,15 @@ function renderStaff(cap) {
         ${iconImg(s.icon)}
         <div class="pcontent">
           <div class="pline">
-            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)} ${leanChip(s.lean || 0)}${s.from ? ` <span class="chip" title="Poached from a rival">ex-${s.from}</span>` : ''}
+            <b>${s.name}</b>${s.big ? ' <span class="star" title="Big Name">★</span>' : ''} ${tagChip(s.tag)} ${leanChip(s.lean || 0)}${s.from ? ` <span class="chip" title="Poached from a rival">ex-${s.from}</span>` : ''}${s.diva ? ` <span class="chip diva" title="Brilliant, impossible: every month there's a ${Math.round(TUNE.divaQuitChance * 100)}% chance a colleague quits over them.">🔥 DIVA</span>` : ''}
             ${supported ? '' : `<span class="warn" title="No ops support — half output, and they quit after ${TUNE.scholarStrikeLimit} straight unsupported months">⚠ half rate · patience ${'●'.repeat(s.strikes || 0)}${'○'.repeat(Math.max(0, TUNE.scholarStrikeLimit - (s.strikes || 0)))}${(s.strikes || 0) === TUNE.scholarStrikeLimit - 1 ? ' — one more month and they quit' : ''}</span>`}
           </div>
           <div class="pline dim">✦ ${supported ? s.out : Math.floor(s.out * TUNE.unsupportedMult)}/mo · ${fmtMoney(s.salary)}/mo</div>
           <div class="pline quirk">${s.quirk}</div>
-          <button class="btn tiny" data-act="fire" data-kind="scholar" data-id="${s.id}">Let Go</button>
+          ${s.poach ? `<div class="pline poachline">⚠ <b>${s.poach.by}</b> is offering <b>${fmtMoney(s.poach.salary)}/mo</b> (now ${fmtMoney(s.salary)}). Decide before month's end:
+            <button class="btn tiny" data-act="match" data-id="${s.id}">Match</button>
+            <button class="btn tiny" data-act="release" data-id="${s.id}">Let Them Walk</button></div>`
+          : `<button class="btn tiny" data-act="fire" data-kind="scholar" data-id="${s.id}">Let Go</button>`}
         </div>
       </div>`);
   });
@@ -741,8 +917,8 @@ function renderStaff(cap) {
       <div class="person">
         ${iconImg(o.icon)}
         <div class="pcontent">
-          <div class="pline"><b>${o.name}</b></div>
-          <div class="pline dim">${o.role} · supports ${o.supports} · ${fmtMoney(o.salary)}/mo</div>
+          <div class="pline"><b>${o.name}</b>${o.trait ? ` <span class="chip ${o.trait.id === 'expense' ? 'raid' : 'want'}" title="${o.trait.tip}">${o.trait.label}</span>` : ''}</div>
+          <div class="pline dim">${o.role} · supports <b>${o.supports || TUNE.supportRatio}</b> · ${fmtMoney(o.salary)}/mo</div>
           <div class="pline quirk">${o.quirk}</div>
           <button class="btn tiny" data-act="fire" data-kind="ops" data-id="${o.id}">Let Go</button>
         </div>
@@ -759,14 +935,23 @@ function renderPrograms() {
   $('#programsBody').innerHTML = PROGRAMS.map(p => {
     const on = G.programs[p.id];
     const wanted = G.donors.some(d => d.demand.type === 'PROGRAM' && d.demand.pid === p.id);
+    const fellowsNote = p.id === 'fellows' && on
+      ? ` · next fellow in ${6 - (((G.progMonths || {}).fellows || 0) % 6)} mo` : '';
+    const costLine = p.once
+      ? `${fmtMoney(p.once)} once${p.cost ? ` + ${fmtMoney(p.cost)}/mo upkeep` : ''}${p.inf ? ` · ✦ +${p.inf}/mo` : ''}`
+      : `${fmtMoney(p.cost)}/mo${p.inf ? ` · ✦ +${p.inf}/mo` : ' · produces nothing'}${fellowsNote}`;
+    const button = p.once
+      ? (on ? '<span class="chip on" title="Endowed in perpetuity — this cannot be shut down">PERMANENT</span>'
+            : `<button class="btn tiny" data-act="prog" data-id="${p.id}" ${G.cash < p.once ? 'disabled' : ''}>Endow (${fmtMoney(p.once)})</button>`)
+      : `<button class="btn tiny" data-act="prog" data-id="${p.id}">${on ? 'Shut Down' : 'Launch'}</button>`;
     return `
       <div class="program ${on ? 'on' : ''}">
         ${iconImg('program_' + p.id)}
         <div class="pcontent">
           <div class="pline"><b>${p.name}</b> ${on ? '<span class="chip on">RUNNING</span>' : ''} ${wanted ? '<span class="chip want" title="A current donor demands this">DONOR BAIT</span>' : ''}</div>
-          <div class="pline dim">${fmtMoney(p.cost)}/mo${p.inf ? ` · ✦ +${p.inf}/mo` : ' · produces nothing'}</div>
+          <div class="pline dim">${costLine}</div>
           <div class="pline quirk">${p.blurb}</div>
-          <button class="btn tiny" data-act="prog" data-id="${p.id}">${on ? 'Shut Down' : 'Launch'}</button>
+          ${button}
         </div>
       </div>`;
   }).join('');
@@ -781,9 +966,15 @@ function renderMyDonors() {
         <div class="pcontent">
           <div class="pline"><b>${d.name}</b> ${leanChip(d.lean)}</div>
           <div class="pline dim">${fmtMoney(d.grant)}/mo · ⌛ cycle: ${Math.max(0, d.term === undefined ? 18 : d.term - (G.month - d.joined))} mo left</div>
-          <div class="pline ${met ? 'ok' : 'warn'}">${met ? '✓' : '✗'} ${demandText(d)}${d.demand.type === 'ENGAGE' ? ` <span class="dim">(this month: ✦${(G.monthCommits || {})[d.demand.tag] || 0})</span>` : ''}</div>
-          <div class="pline dim">Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, TUNE.strikeLimit - d.strikes))}${d.strikes === TUNE.strikeLimit - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>
-          <button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>
+          <div class="pline ${met ? 'ok' : 'warn'}">${met ? '✓' : '✗'} ${demandText(d)}${d.demand.type === 'ENGAGE' ? (G.fights.some(f => f.tag === d.demand.tag) ? ` <span class="dim">(this month: ✦${(G.monthCommits || {})[d.demand.tag] || 0})</span>` : ` <span class="dim">(no ${d.demand.tag} fight on the board — excused this month)</span>`) : ''}</div>
+          ${(() => {
+            const cap = d.renewals ? 1 : TUNE.strikeLimit;
+            return `<div class="pline dim">${d.renewals ? '<span class="chip want" title="Renewed relationship: stricter terms, and a single strike ends it">RENEWED</span> ' : ''}Strikes: ${'●'.repeat(d.strikes)}${'○'.repeat(Math.max(0, cap - d.strikes))}${d.strikes === cap - 1 ? ' <span class="warn">— one more and they walk</span>' : ''}</div>`;
+          })()}
+          ${d.lapsing ? `<div class="pline poachline">⌛ <b>Cycle over.</b> Renew for ✦${Math.ceil(courtCost(d) * TUNE.renewCostMult)} on stricter terms${d.demand.type === 'ENGAGE' ? ` (wants ✦${d.demand.amt + 5}/mo)` : d.demand.type === 'ROSTER' ? ' (wants 2 scholars)' : ''} — one strike ends a renewed deal — or let it lapse:
+            <button class="btn tiny" data-act="renew" data-id="${d.id}">Renew</button>
+            <button class="btn tiny" data-act="lapse" data-id="${d.id}">Let Lapse</button></div>`
+          : `<button class="btn tiny" data-act="drop" data-id="${d.id}">Part Ways</button>`}
         </div>
       </div>`;
   });
@@ -795,7 +986,8 @@ function expertiseChip(tag) {
   const n = G.scholars.filter(s => s.tag === tag).length;
   if (!n) return '';
   const pct = Math.round((expertiseMult(tag) - 1) * 100);
-  return ` <span class="chip on" title="Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).">★ +${pct}%</span>`;
+  const wr = G.programs.warroom ? ' The War Room adds 10 points of that.' : '';
+  return ` <span class="chip on" title="Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).${wr}">★ +${pct}%</span>`;
 }
 
 // who's behind each side of a fight, sorted big to small
@@ -818,11 +1010,11 @@ function renderFights() {
       <div class="card fightcard">
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
-          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
+          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
           <div class="tug"><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
-              <span class="sidelabel">${si === 0 ? '◤' : '◢'} ${s.label} ${leanChip(s.lean)}</span>
+              <span class="sidelabel"><span class="sidemark ${si === 0 ? 'a' : 'b'}" title="This side's segment of the bar is ${si === 0 ? 'gold' : 'violet'}">${si === 0 ? '◤' : '◢'}</span> ${s.label} ${leanChip(s.lean)}</span>
               <span class="sidenums">${s.total}</span>
               <span class="sidebtns">
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="5">+5</button>
@@ -838,7 +1030,7 @@ function renderFights() {
 
 function renderReport() {
   const s = G.stats;
-  const grants = monthlyGrants(), payroll = payrollCost(), rent = tank().rent, prog = programsCost();
+  const grants = monthlyGrants(), payroll = payrollCost(), rent = effectiveRent(), prog = programsCost();
   const net = grants - payroll - rent - prog;
   const cap = supportCap();
   const lbRows = standings().map((row, i) => {
@@ -895,7 +1087,7 @@ function renderHireMarket() {
           <div class="cardbody mrow">
             ${iconImg(h.icon)}
             <div class="mcontent">
-              <div class="pline">${tagChip(h.tag)} ${leanChip(h.lean || 0)}${h.from ? ` <span class="chip raid" title="Currently at a rival. Hiring is a raid: 1.5× signing bonus, and ${h.from} permanently loses ~${TUNE.raidBudgetHit}/mo of influence budget">AT ${h.from.toUpperCase()}</span>` : ''}</div>
+              <div class="pline">${tagChip(h.tag)} ${leanChip(h.lean || 0)}${h.from ? ` <span class="chip raid" title="Currently at a rival. Hiring is a raid: 1.5× signing bonus, and ${h.from} permanently loses ~${TUNE.raidBudgetHit}/mo of influence budget">AT ${h.from.toUpperCase()}</span>` : ''}${h.diva ? ` <span class="chip diva" title="Enormous output — and every month there's a ${Math.round(TUNE.divaQuitChance * 100)}% chance a colleague quits over them.">🔥 DIVA</span>` : ''}</div>
               <div class="pline">✦ ${h.out}/mo · ${fmtMoney(h.salary)}/mo</div>
               <div class="pline quirk">${h.quirk}</div>
               <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>${fitTipHire(h)}
@@ -909,8 +1101,8 @@ function renderHireMarket() {
         <div class="cardbody mrow">
           ${iconImg(h.icon)}
           <div class="mcontent">
-            <div class="pline"><span class="chip">OPS</span> <span class="dim">${h.role}</span></div>
-            <div class="pline">Supports ${h.supports} scholars · ${fmtMoney(h.salary)}/mo</div>
+            <div class="pline"><span class="chip">OPS</span> <span class="dim">${h.role}</span>${h.trait ? ` <span class="chip ${h.trait.id === 'expense' ? 'raid' : 'want'}" title="${h.trait.tip}">${h.trait.label}</span>` : ''}</div>
+            <div class="pline">Supports <b>${h.supports}</b> scholar${h.supports > 1 ? 's' : ''} · ${fmtMoney(h.salary)}/mo</div>
             <div class="pline quirk">${h.quirk}</div>
             <button class="btn tiny" data-act="hire" data-idx="${i}">Hire (${fmtMoney(hireBonus(h))} bonus)</button>
           </div>
@@ -949,6 +1141,11 @@ document.addEventListener('click', e => {
   else if (act === 'court') actCourt(+b.dataset.idx);
   else if (act === 'drop') actDrop(b.dataset.id);
   else if (act === 'prog') actProgram(b.dataset.id);
+  else if (act === 'prospect') actProspect(b.dataset.kind);
+  else if (act === 'renew') actRenew(b.dataset.id);
+  else if (act === 'lapse') actLapse(b.dataset.id);
+  else if (act === 'match') actMatch(+b.dataset.id);
+  else if (act === 'release') actRelease(+b.dataset.id);
   else if (act === 'commit') actCommit(+b.dataset.f, +b.dataset.s, +b.dataset.amt);
   else if (act === 'closepaper') $('#paper').classList.add('hidden');
   else if (act === 'restart') { clearSave(); $('#paper').classList.add('hidden'); G = null; renderStart(); showScreen('start'); }

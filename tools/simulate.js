@@ -28,7 +28,10 @@ function stubEl() {
 const EL = stubEl();
 
 const sandbox = {
-  document: { querySelector: () => EL, querySelectorAll: () => [], addEventListener() {} },
+  document: {
+    querySelector: () => EL, querySelectorAll: () => [], addEventListener() {},
+    createElement: () => stubEl(), body: { appendChild() {} },
+  },
   window: {},
   alert() {},
   confirm() { return true; },
@@ -124,27 +127,43 @@ function botDecent() {
 }
 
 function botShrewd() {
-  // support discipline first
+  // answer standing offers first: poach bids and expiring donors
+  G.scholars.filter(s => s.poach).forEach(s => {
+    if (s.out >= 14 && G.cash > 500) actMatch(s.id); else actRelease(s.id);
+  });
+  G.donors.filter(d => d.lapsing).forEach(d => {
+    const cost = Math.ceil(courtCost(d) * TUNE.renewCostMult);
+    const rosterOk = d.demand.type !== 'ROSTER' || G.scholars.filter(x => x.tag === d.demand.tag).length >= 2;
+    if (d.grant >= 100 && cost <= G.influence - 30 && rosterOk) actRenew(d.id);
+    else actLapse(d.id);
+  });
+  // support discipline first (capacity per salary, skip lavish offices)
   while (G.scholars.length > supportCap() && G.cash > 250) {
-    const ops = affordableHires().filter(x => x.h.kind === 'ops').sort((a, b) => a.h.salary - b.h.salary);
+    const ops = affordableHires().filter(x => x.h.kind === 'ops' && (!x.h.trait || x.h.trait.id !== 'expense'))
+      .sort((a, b) => (b.h.supports / b.h.salary) - (a.h.supports / a.h.salary));
     if (!ops.length) break;
     actHire(ops[0].i);
   }
   // run programs current funders demand; drop dead weight
   PROGRAMS.forEach(p => {
     const wanted = G.donors.some(d => d.demand.type === 'PROGRAM' && d.demand.pid === p.id);
-    if (wanted && !G.programs[p.id]) actProgram(p.id);
-    if (!wanted && G.programs[p.id] && p.inf === 0) actProgram(p.id);
+    if (wanted && !G.programs[p.id] && !p.once) actProgram(p.id);
+    if (!wanted && G.programs[p.id] && p.inf === 0 && !p.once && p.id !== 'warroom') actProgram(p.id);
   });
+  // long-term investments once the machine hums
+  const net0 = monthlyGrants() - monthlyCosts();
+  if (!G.programs.journal && net0 > 50) actProgram('journal');
+  if (!G.programs.warroom && net0 > 40 && G.month >= 4) actProgram('warroom');
+  if (!G.programs.chair && G.cash > 1200) actProgram('chair');
   // court aggressively — breadth pays; just keep a small war chest
   const courtable = G.donorMarket.map((d, i) => ({ d, i }))
     .filter(x => courtCost(x.d) <= G.influence - 25)
     .sort((a, b) => (b.d.grant / courtCost(b.d)) - (a.d.grant / courtCost(a.d)));
   if (courtable.length) actCourt(courtable[0].i);
-  // grow the bench when finances allow
+  // grow the bench when finances allow (divas are someone else's problem)
   const net = monthlyGrants() - monthlyCosts();
   if (G.cash > 500 && net > 0 && G.scholars.length < supportCap()) {
-    const c = affordableHires().filter(x => x.h.kind === 'scholar')
+    const c = affordableHires().filter(x => x.h.kind === 'scholar' && !x.h.diva)
       .sort((a, b) => (b.h.out / b.h.salary) - (a.h.out / a.h.salary));
     if (c.length) actHire(c[0].i);
   }
