@@ -39,7 +39,12 @@ const TUNE = {
   rivalSlope: 0.5,       // ...flat>0 compresses the spread between big and small tanks
   rivalCloserMult: 1.6,  // (dice rivals) weight fights in their final month this much harder
   rivalFocus: 0.45,      // odds a rival sits out a fight outside its pet issues
-  contestK: 3.2,         // resolution odds curve: P = A^k/(A^k+B^k); higher = less upset-prone
+  contestK: 2.6,         // resolution odds curve: P = A^k/(A^k+B^k); 2.6 → a 2:1 lead wins ~86% before volatility
+  volMin: 0.8,           // each fight draws a hidden volatility that divides its curve exponent...
+  volMax: 1.3,           // ...so some fights are steadier than the card suggests, some wilder
+  floorChance: 0.15,     // monthly odds a live fight gets a floor-action twist (rolled a month ahead)
+  darkChance: 0.25,      // odds an outside group drops money on a fight in its final month
+  fogPct: 0.25,          // the backers line is the Bugle's estimate, off by up to this share (a third with a Gov Relations Lead)
   crisisChance: 0.16,    // monthly odds a crisis lands (never two at once)
   electionSeasonStart: 16, // month index when election season begins (6 months out)
   electionSeasonMult: 1.5, // rival budgets scale by this during election season
@@ -50,7 +55,7 @@ const TUNE = {
   aiBuffer: 12,          // ...padded per month left, since the other side keeps piling on
   aiMaxShare: 0.6,       // no single new fight gets more than this share of a rival's chest
   aiChestMonths: 6,      // a chest bigger than this many months' income gets spent regardless
-  aiIncomeByLevel: [1.15, 1.25, 1.3, 1.4], // thinking rivals' income multiplier by difficulty (Easy … Expert)
+  aiIncomeByLevel: [1.25, 1.45, 1.5, 1.6], // thinking rivals' income multiplier by difficulty (Easy … Expert)
   aiDiceLevel: -1,       // difficulty levels at or below this roll dice instead of thinking (−1: nobody)
   rivalTrackPct: 0.3,    // rival income never falls below this share of the top human's monthly production...
   rivalTrackStep: 0.05,  // ...minus this on Easy, plus this per tier above Medium
@@ -463,6 +468,28 @@ const FIGHT_TYPES = {
   APPROPS: { allPet:true, refund:0.4, tip:'A must-pass appropriations rider: marquee-sized cash, every rival piles in, and the losing side gets 40% of its stake back — riders get traded.' },
   STATE:   { rivalSkip:0.6, tip:'A statehouse fight: cheap, quick, small rewards — and the federal-minded rivals sit most of them out (60%). The small shop’s hunting ground.' },
 };
+
+// ------------------------------------------------------------
+// Floor action: a twist that can hit any live fight, rolled a month ahead
+// (a Gov Relations Lead sees it coming). {FIGHT} and {SIDE} are filled in.
+// ------------------------------------------------------------
+const FLOOR_ACTIONS = [
+  { id:'swing',   w:3, label:'swing vote',   h:'SWING VOTE FLIPS ON {FIGHT}', s:'A member “re-examines the record.” A fifth of the leading side’s support walks across the aisle.' },
+  { id:'poison',  w:2, label:'poison pill',  h:'POISON-PILL AMENDMENT ATTACHED TO {FIGHT}', s:'The rewards for winning are now half what they were. Nobody will admit to drafting it.' },
+  { id:'sponsor', w:2, label:'clock slips',  h:'{FIGHT}: SPONSOR “NEEDS MORE TIME”', s:'The vote slips a month. The sponsor is at a wedding.' },
+  { id:'fast',    w:2, label:'fast-tracked', h:'LEADERSHIP FAST-TRACKS {FIGHT}', s:'The vote moves up a month. Whip counts are being taken in hallways.' },
+  { id:'table',   w:1, label:'motion to table', h:'MOTION TO TABLE: {FIGHT} RESOLVES NOW', s:'No more months. The gavel is already in the air.' },
+  { id:'scandal', w:2, label:'scandal',      h:'SCANDAL HITS THE “{SIDE}” CAMP ON {FIGHT}', s:'A quarter of their support finds somewhere else to be.' },
+  { id:'leak',    w:2, label:'leak',         h:'LEAKED: THE REAL NUMBERS ON {FIGHT}', s:'Somebody’s spreadsheet reached the Bugle. Every pile is exact this month.' },
+  { id:'rider',   w:2, label:'rider',        h:'A RIDER ATTACHES TO {FIGHT}', s:'Somebody’s district gets a bridge. The rewards for winning grow by half.' },
+];
+
+// outside money with a boring name: if it ends up the biggest backer, nobody gets the credit
+const DARK_GROUPS = [
+  'Americans for American Americans', 'Citizens for a Better Something', 'The 1789 Society',
+  'Concerned Trustees for Prosperity', 'Mothers Against Whatever This Is', 'The Coalition for the Coalition',
+  'Patriots for Fiscal Weather', 'Friends of the Committee', 'The Institute for the Institute',
+];
 
 const FIGHTS = [
   // ---- hearings: clout, testimony, and the occasional rival in the hot seat ----

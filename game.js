@@ -288,6 +288,7 @@ function drawFight() {
     monthsLeft: def.months,
     sides: def.sides.map(s => ({ label: s.label, lean: s.lean, total: 0, yours: 0, rivals: {} })),
     rivalPicks: {}, crossed: {}, targetRival, monthUsed: {},
+    vol: TUNE.volMin + Math.random() * (TUNE.volMax - TUNE.volMin), nextFloor: null, leakUntil: -1,
   });
 }
 
@@ -794,7 +795,8 @@ function expertiseMult(tag) {
 // resolution odds: sharpened contest curve — a 2:1 influence lead wins ~85%,
 // 3:1 ~94%, but nothing is ever certain (except a walkover vs zero)
 function fightType(f) { return FIGHT_TYPES[f.type] || {}; }
-function fightK(f) { return fightType(f).k || TUNE.contestK; }
+function fightBaseK(f) { return fightType(f).k || TUNE.contestK; }
+function fightK(f) { return fightBaseK(f) / (f.vol || 1); }   // the hidden volatility bends the curve
 function fightCap(f) { return fightType(f).capPerMonth || 0; }
 function winProbA(f) {
   const a = f.sides[0].total, b = f.sides[1].total;
@@ -1672,6 +1674,65 @@ function rivalCommits() {
   });
 }
 
+// ---------- variance: floor action and dark money ----------
+function scaleSide(s, mult) {
+  s.total = Math.round(s.total * mult);
+  if (s.yours) s.yours = Math.round(s.yours * mult);
+  Object.keys(s.players || {}).forEach(k => s.players[k] = Math.round(s.players[k] * mult));
+  Object.keys(s.rivals || {}).forEach(k => s.rivals[k] = Math.round(s.rivals[k] * mult));
+}
+// decide next month's twist for every fight that will still be live
+function rollFloorActions() {
+  W.fights.forEach(f => {
+    f.nextFloor = null;
+    if (Math.random() >= TUNE.floorChance) return;
+    const pool = FLOOR_ACTIONS.filter(a => !((a.id === 'table' || a.id === 'fast') && f.monthsLeft < 2));
+    const wSum = pool.reduce((a, x) => a + x.w, 0);
+    let roll = Math.random() * wSum;
+    f.nextFloor = pool.find(a => (roll -= a.w) <= 0).id || pool[pool.length - 1].id;
+  });
+}
+const FLOOR_FX = {
+  swing: f => { const [a, b] = f.sides; const big = a.total >= b.total ? a : b, small = big === a ? b : a; const moved = Math.round(big.total * 0.2); if (!moved) return null; scaleSide(big, 0.8); small.total += moved; return { side: big.label }; },
+  poison: f => { f.reward = { ...f.reward, cash: Math.round((f.reward.cash || 0) / 2), inf: Math.round((f.reward.inf || 0) / 2) }; return {}; },
+  sponsor: f => { f.monthsLeft += 1; return {}; },
+  fast: f => { if (f.monthsLeft < 2) return null; f.monthsLeft -= 1; return {}; },
+  table: f => { if (f.monthsLeft < 2) return null; f.monthsLeft = 1; return {}; },
+  scandal: f => { const s = pick(f.sides); if (!s.total) return null; scaleSide(s, 0.75); return { side: s.label }; },
+  leak: f => { f.leakUntil = W.month + 1; return {}; },
+  rider: f => { f.reward = { ...f.reward, cash: Math.round((f.reward.cash || 0) * 1.5), inf: Math.round((f.reward.inf || 0) * 1.5) }; return {}; },
+};
+function floorAction(newsFor) {
+  W.fights.forEach(f => {
+    const id = f.nextFloor; f.nextFloor = null;
+    if (!id) return;
+    const def = FLOOR_ACTIONS.find(a => a.id === id);
+    const res = FLOOR_FX[id](f);
+    if (!res) return;
+    const fill = t => t.replace('{FIGHT}', f.title.toUpperCase()).replace('{SIDE}', (res.side || '').toUpperCase());
+    newsAll(newsFor, { h: `FLOOR ACTION — ${fill(def.h)}`, s: def.s });
+    logAll(`Floor action on ${f.title}: ${def.label}.`);
+  });
+}
+// an outside group drops a pile in a fight's final month; if it's the biggest
+// backer when the votes are counted, nobody in town gets the credit
+function darkMoney(newsFor) {
+  W.fights.filter(f => f.monthsLeft <= 1).forEach(f => {
+    if (Math.random() >= TUNE.darkChance) return;
+    const [a, b] = f.sides;
+    const trailing = a.total <= b.total ? a : b, leading = trailing === a ? b : a;
+    const s = Math.random() < 0.6 ? trailing : leading;
+    const amt = Math.max(15, Math.round(Math.max(a.total, b.total) * (0.3 + Math.random() * 0.4)));
+    const name = pick(DARK_GROUPS.filter(n => !Object.keys(a.rivals || {}).includes(n) && !Object.keys(b.rivals || {}).includes(n)));
+    s.rivals = s.rivals || {};
+    s.rivals[name] = (s.rivals[name] || 0) + amt;
+    s.total += amt;
+    f.dark = { name, side: s.label, amt };
+    newsAll(newsFor, { h: `DARK MONEY: ${name.toUpperCase()} DROPS ✦${amt} ON “${s.label.toUpperCase()}”`, s: `A 501(c)(4) with a boring name and no phone number weighs in on “${f.title}.” If they end up the biggest backer, nobody in town gets the credit.` });
+    logAll(`Dark money: ${name} put ✦${amt} on “${s.label}” (${f.title}).`);
+  });
+}
+
 // the town reads the rivals' books: hoarding and all-in months make the paper
 function rivalTelegraphs(newsFor) {
   if (aiLevel() <= TUNE.aiDiceLevel) return;
@@ -1738,6 +1799,10 @@ function monthWorldPre(newsFor) {
   rivalCommits();
   rivalTelegraphs(newsFor);
 
+  // 1.6 floor action: last month's whispered twist lands; then dark money
+  floorAction(newsFor);
+  darkMoney(newsFor);
+
   // 2. clocks tick; fights resolve (unless a shutdown froze the Hill)
   if (W.freeze > 0) {
     W.freeze--;
@@ -1749,6 +1814,7 @@ function monthWorldPre(newsFor) {
     W.fights = W.fights.filter(f => f.monthsLeft > 0);
   }
   W.fights.forEach(f => f.monthUsed = {});
+  rollFloorActions();
 
   // 7.5 the leaderboard has a story: lead changes make the paper
   {
@@ -2642,47 +2708,85 @@ function expertiseChip(tag) {
   return ` <span class="chip on" title="Due to expertise, influence you commit here gets a +${pct}% bonus (${n} ${tag} scholar${n > 1 ? 's' : ''} on staff).${wr}">★ +${pct}%</span>`;
 }
 
-// who's behind each side of a fight, sorted big to small
-function backersText(s) {
+// the Bugle's numbers: everyone else's pile is an estimate until the vote
+// (or a leak); a Gov Relations Lead tightens the guess to a third of the fog
+function fogExact(f) { return f.monthsLeft <= 0 || (f.leakUntil !== undefined && f.leakUntil >= W.month); }
+function fogNoise(f, key) {
+  let h = 2166136261;
+  const str = `${f.defId}|${key}|${W.month}`;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return ((h % 2001) / 1000) - 1;   // deterministic in [-1, 1]: no jitter between renders
+}
+function fogPct() { return specCount('govrel') ? TUNE.fogPct / 3 : TUNE.fogPct; }
+function estimate(f, key, v) { return fogExact(f) ? v : Math.max(0, Math.round(v * (1 + fogNoise(f, key) * fogPct()))); }
+function estTotal(f, s) {
+  if (fogExact(f)) return s.total;
   const mine = yoursOf(s);
-  const entries = Object.entries(s.rivals || {}).sort((x, y) => y[1] - x[1]);
-  const humans = Object.entries(s.players || {}).filter(([pid]) => !(G && pid === G.pid)).map(([pid, v]) => [playerName(pid), v]);
-  const all = [...entries, ...humans].sort((x, y) => y[1] - x[1]);
-  const parts = all.map(([n, v]) => `${n} ${v}`);
-  const attributed = all.reduce((a, e) => a + e[1], 0);
+  let sum = mine;
+  Object.entries(s.rivals || {}).forEach(([k, v]) => { sum += estimate(f, k, v); });
+  Object.entries(s.players || {}).forEach(([pid, v]) => { if (!(G && pid === G.pid)) sum += estimate(f, pid, v); });
+  const attributed = Object.values(s.rivals || {}).reduce((a, v) => a + v, 0) + Object.entries(s.players || {}).filter(([pid]) => !(G && pid === G.pid)).reduce((a, [, v]) => a + v, 0);
   const other = s.total - mine - attributed;
-  if (other > 0) parts.push(`Others ${other}`);
+  if (other > 0) sum += estimate(f, 'others', other);
+  return sum;
+}
+// odds as a range: the estimated totals through the base curve, bent both ways
+function oddsRange(f) {
+  const a = estTotal(f, f.sides[0]), b = estTotal(f, f.sides[1]);
+  if (a === 0 && b === 0) return [50, 50];
+  const P = k => { const pa = Math.pow(a, k), pb = Math.pow(b, k); return Math.round(100 * pa / (pa + pb)); };
+  const k = fightBaseK(f);
+  const lo = P(k / TUNE.volMax), hi = P(k / TUNE.volMin);
+  return [Math.min(lo, hi), Math.max(lo, hi)];
+}
+
+// who's behind each side of a fight, sorted big to small
+function backersText(f, s) {
+  const mine = yoursOf(s);
+  const exact = fogExact(f);
+  const entries = Object.entries(s.rivals || {}).map(([k, v]) => [k, estimate(f, k, v)]).sort((x, y) => y[1] - x[1]);
+  const humans = Object.entries(s.players || {}).filter(([pid]) => !(G && pid === G.pid)).map(([pid, v]) => [playerName(pid), estimate(f, pid, v)]);
+  const all = [...entries, ...humans].sort((x, y) => y[1] - x[1]);
+  const tilde = exact ? '' : '~';
+  const parts = all.map(([n, v]) => `${n} ${tilde}${v}`);
+  const attributedExact = Object.values(s.rivals || {}).reduce((a, v) => a + v, 0) + Object.entries(s.players || {}).filter(([pid]) => !(G && pid === G.pid)).reduce((a, [, v]) => a + v, 0);
+  const other = s.total - mine - attributedExact;
+  if (other > 0) parts.push(`Others ${tilde}${estimate(f, 'others', other)}`);
   if (mine > 0) parts.unshift(`<b>You ${mine}</b>`);
-  return parts.length ? '⚑ ' + parts.join(' · ') : '⚑ no backers yet';
+  return parts.length ? `<span title="${exact ? 'Exact figures.' : 'The Bugle’s estimates — everyone else’s pile could be off by up to ' + Math.round(fogPct() * 100) + '%. Exact after the vote, or after a leak.'}">⚑ ${parts.join(' · ')}</span>` : '⚑ no backers yet';
 }
 
 function renderFights() {
   $('#fightsBody').innerHTML = W.fights.map((f, fi) => {
     const [a, b] = f.sides;
-    const pWin = Math.round(winProbA(f) * 100);
+    const [pLo, pHi] = oddsRange(f);
+    const pWin = Math.round((pLo + pHi) / 2);
     const pctA = Math.max(2, Math.min(98, pWin));
+    const exact = fogExact(f);
+    const oddsText = si => si === 0 ? (pLo === pHi ? `${pLo}%` : `${pLo}–${pHi}%`) : (pLo === pHi ? `${100 - pLo}%` : `${100 - pHi}–${100 - pLo}%`);
+    const warn = f.nextFloor && specCount('govrel') ? ` <span class="chip vend" title="Your Gov Relations Lead hears next month brings: ${FLOOR_ACTIONS.find(x => x.id === f.nextFloor).s}">👁 next: ${FLOOR_ACTIONS.find(x => x.id === f.nextFloor).label}</span>` : '';
     return `
       <div class="card fightcard">
         <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}" title="${fightType(f).tip || ''}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
-          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}${fightCap(f) ? ` <span class="chip" title="Rulemaking docket: at most ✦${fightCap(f)} per institution per month. Patient positions beat dumps.">📋 ✦${(f.monthUsed || {})[G.pid || 'me'] || 0}/${fightCap(f)} this month</span>` : ''}${f.targetRival ? ` <span class="chip vend" title="${f.targetRival} is in the hot seat: if the probe side wins, their donor confidence drops 10. They will defend themselves.">🎯 ${f.targetRival.toUpperCase()}</span>` : ''}</div>
+          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}${fightCap(f) ? ` <span class="chip" title="Rulemaking docket: at most ✦${fightCap(f)} per institution per month. Patient positions beat dumps.">📋 ✦${(f.monthUsed || {})[G.pid || 'me'] || 0}/${fightCap(f)} this month</span>` : ''}${f.targetRival ? ` <span class="chip vend" title="${f.targetRival} is in the hot seat: if the probe side wins, their donor confidence drops 10. They will defend themselves.">🎯 ${f.targetRival.toUpperCase()}</span>` : ''}${warn}${f.dark ? ` <span class="chip raid" title="${f.dark.name} dropped ✦${f.dark.amt} on “${f.dark.side}”. If they're the biggest backer at the vote, nobody gets the credit.">💼 dark money</span>` : ''}</div>
           ${testimonyReady(f) ? (() => {
             const w = bestWitness(f.tag), st = testifyStakes(f, w), pc = testifyPrepCost();
             const p0 = Math.round(testifyOdds(w, false, f) * 100), p1 = Math.round(testifyOdds(w, true, f) * 100);
             return `<div class="pline"><button class="btn tiny" data-act="testify" data-f="${fi}" title="${w.name} takes the stand for “${st.side.label}”: ${p0}% they command the room (+${st.gain} — 1.5× their output, or a tenth of the other side's pile, whichever is bigger); otherwise −${st.loss} (${Math.round(TUNE.testifyFlubPct * 100)}% of your stake, never more than their output) and a bruised ego.">📣 Testify: ${w.name} · ${p0}% for +${st.gain}, else −${st.loss}</button> <button class="btn tiny" data-act="testify" data-f="${fi}" data-prep="1" ${G.influence < pc ? 'disabled' : ''} title="Murder boards and a haircut: +${Math.round(TUNE.testifyPrepBonus * 100)}% odds${pc ? ` for ✦${pc}` : ' — free, your Comms Director runs prep'}">Prep & testify (${pc ? `✦${pc}, ` : ''}${p1}%)</button></div>`;
           })() : ''}
           ${f.testimony ? `<div class="pline ${f.testimony.ok ? 'ok' : 'warn'}">📣 ${f.testimony.who} ${f.testimony.ok ? 'commanded the hearing room' : 'flubbed the hearing'}: ${f.testimony.eff > 0 ? '+' : ''}${f.testimony.eff}</div>` : ''}
-          <div class="tug" title="Odds if it resolved right now. Influence ratios are sharpened (a 2:1 lead wins ~85%) — but the wire decides, and upsets happen."><div class="tugA" style="width:${pctA}%"></div></div>
+          <div class="tug" title="Odds if it resolved right now, from the Bugle's estimates${exact ? '' : ' (everyone else’s pile could be off by up to ' + Math.round(fogPct() * 100) + '%)'}. The range covers this fight's hidden temperament: some are steadier than they look, some wilder. A 2:1 lead wins about 80–90%. The wire decides."><div class="tugA" style="width:${pctA}%"></div></div>
           ${f.sides.map((s, si) => `
             <div class="sideline">
               <span class="sidelabel"><span class="sidemark ${si === 0 ? 'a' : 'b'}" title="This side's segment of the bar is ${si === 0 ? 'gold' : 'violet'}">${si === 0 ? '◤' : '◢'}</span> ${s.label} ${leanChip(s.lean)}</span>
-              <span class="sidenums">${s.total} <span class="dim prob">· ${si === 0 ? pWin : 100 - pWin}%</span></span>
+              <span class="sidenums">${exact ? '' : '~'}${estTotal(f, s)} <span class="dim prob">· ${oddsText(si)}</span></span>
               <span class="sidebtns">
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="5">+5</button>
                 <button class="btn tiny" data-act="commit" data-f="${fi}" data-s="${si}" data-amt="25">+25</button>
               </span>
             </div>
-            <div class="backers dim">${backersText(s)}</div>${intelText(f, si)}`).join('')}
+            <div class="backers dim">${backersText(f, s)}</div>${intelText(f, si)}`).join('')}
         </div>
       </div>`;
   }).join('');
