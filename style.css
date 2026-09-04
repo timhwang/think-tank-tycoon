@@ -588,3 +588,11 @@ body {
 
 .rivalname { cursor: help; }
 .intel { font-size: 10px; }
+
+/* ---------- fight classes ---------- */
+.ftype { cursor: help; }
+.ftype.HEARING { background: #f3b9b9; }
+.ftype.RULE { background: #d9d9d9; }
+.ftype.COURT { background: #d8c7ee; }
+.ftype.APPROPS { background: #c8e6b0; }
+.ftype.STATE { background: #ffe9b3; }

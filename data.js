@@ -50,12 +50,13 @@ const TUNE = {
   aiBuffer: 12,          // ...padded per month left, since the other side keeps piling on
   aiMaxShare: 0.6,       // no single new fight gets more than this share of a rival's chest
   aiChestMonths: 6,      // a chest bigger than this many months' income gets spent regardless
-  aiIncomeMult: 1.0,     // thinking rivals (Medium+) earn this much more per month than dice rivals
+  aiIncomeMult: 1.1,     // thinking rivals (Medium+) earn this much more per month than dice rivals
   rivalTrackPct: 0.3,    // rival income never falls below this share of the top human's monthly production...
   rivalTrackStep: 0.05,  // ...minus this on Easy, plus this per tier above Medium
   rivalBenchBonus: 0.15, // rivals have benches too: commits in their pet issues hit this much harder
   aiPoolLevel: 2,        // rivals pool credit from this difficulty level up (0 Easy … 3 Expert)
   aiDenyLevel: 2,        // ...and spend the whole chest to deny the human leader credit from this level up
+  stateRivalSkip: 0.6,   // odds a rival sits out a STATE fight (the big shops don't do statehouses)
   courtCostMult: 1.5,    // global scaler on donor courting costs
   scholarOutMult: 1.08,  // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
@@ -443,7 +444,92 @@ const PROGRAMS = [
 //   'donorlead' a donor appears in the market at half court cost
 //   'absolve'   every current donor's strikes drop by 1
 // ------------------------------------------------------------
+// ------------------------------------------------------------
+// Fight classes. Each changes the rhythm, not just the label:
+//   k            — resolution odds curve for this class (default TUNE.contestK)
+//   capPerMonth  — max ✦ any one institution can commit per month
+//   refund       — share of a losing stake returned to human backers
+//   rivalSkip    — odds a rival sits the fight out regardless of its issues
+//   allPet       — every rival treats it as a pet issue
+// ------------------------------------------------------------
+const FIGHT_TYPES = {
+  BILL:    { tip:'Legislation: the default fight. Pass it or block it.' },
+  EO:      { tip:'An executive order: uphold it or get it rescinded.' },
+  NOM:     { tip:'A nomination: confirm or reject. Cash-rich, partisan.' },
+  HEARING: { tip:'Oversight hearing: fast and loud. Pays clout, not cash. Testimony odds +20% here — and a flub is public (donor confidence −3). Hearings that name a rival dent that rival’s donor confidence when the probe side wins.' },
+  RULE:    { capPerMonth:30, tip:'Agency rulemaking with a comment period: long, and the docket takes at most ✦30 per institution per month, so patient positions beat last-minute dumps. Industry money: big cash.' },
+  COURT:   { k:1.8, tip:'A circuit or Supreme Court case: long, and the wire is wild (a flatter odds curve — upsets are common). Winning seats an ally on the bench: +10% on this issue’s commits, permanently.' },
+  APPROPS: { allPet:true, refund:0.4, tip:'A must-pass appropriations rider: marquee-sized cash, every rival piles in, and the losing side gets 40% of its stake back — riders get traded.' },
+  STATE:   { rivalSkip:0.6, tip:'A statehouse fight: cheap, quick, small rewards — and the federal-minded rivals sit most of them out (60%). The small shop’s hunting ground.' },
+};
+
 const FIGHTS = [
+  // ---- hearings: clout, testimony, and the occasional rival in the hot seat ----
+  { id:'hear_algo', type:'HEARING', tag:'TECH', months:2, reward:{inf:35},
+    title:'Hearing: “Do the Algorithms Know Where My Kids Are?”',
+    sides:[{label:'Grill the Platforms', lean:-1},{label:'Defend Innovation', lean:1}] },
+  { id:'hear_probe', type:'HEARING', tag:'TAX', months:2, reward:{inf:30}, target:'rival',
+    title:'Oversight Probe: {RIVAL}’s Consulting Contracts',
+    sides:[{label:'Subpoena Everything', lean:0},{label:'Nothing to See Here', lean:0}] },
+  { id:'hear_eggs', type:'HEARING', tag:'TAX', months:1, reward:{inf:30, cash:60},
+    title:'Hearing: The Price of Eggs, Part IV',
+    sides:[{label:'Blame the Fed', lean:1},{label:'Blame the Chickens', lean:-1}] },
+  { id:'hear_balloon', type:'HEARING', tag:'DEF', months:2, reward:{inf:35},
+    title:'Hearing: Who Approved the Balloon?',
+    sides:[{label:'Demand Answers', lean:1},{label:'Move On, It Was a Balloon', lean:-1}] },
+  // ---- rulemakings: long, capped, lucrative ----
+  { id:'rule_crypto', type:'RULE', tag:'TECH', months:5, reward:{cash:550},
+    title:'Proposed Rule: Are Tokens Securities, Vegetables, or Both?',
+    sides:[{label:'Finalize: They Are Securities', lean:-1},{label:'Withdraw: They Are Vibes', lean:1}] },
+  { id:'rule_methane', type:'RULE', tag:'CLIM', months:4, reward:{cash:500},
+    title:'Proposed Rule: Methane Fee Implementation',
+    sides:[{label:'Finalize: Charge for the Burps', lean:-1},{label:'Withdraw: Cows Have Rights', lean:1}] },
+  { id:'rule_drugs', type:'RULE', tag:'HLTH', months:5, reward:{cash:600},
+    title:'Proposed Rule: Drug Price Negotiation, Round Two',
+    sides:[{label:'Finalize: Negotiate Harder', lean:-1},{label:'Withdraw: Let the Market Cure You', lean:1}] },
+  { id:'rule_tariffcalc', type:'RULE', tag:'TRADE', months:4, reward:{cash:480},
+    title:'Proposed Rule: The Tariff Calculator (Now With Decimals)',
+    sides:[{label:'Finalize: Decimals Are Good', lean:0},{label:'Withdraw: Round to the Nearest War', lean:0}] },
+  // ---- courts: long, swingy, and the prize is a friend on the bench ----
+  { id:'court_agency', type:'COURT', tag:'TAX', months:5, reward:{cash:250, special:'ally'},
+    title:'SCOTUS: Everyone v. The Administrative State',
+    sides:[{label:'Amicus: Uphold the Agencies', lean:-1},{label:'Amicus: Overrule Everything', lean:1}] },
+  { id:'court_tiktank', type:'COURT', tag:'TECH', months:4, reward:{cash:200, special:'ally'},
+    title:'Circuit Court: TikTank v. Commerce',
+    sides:[{label:'Amicus: The App Stays', lean:-1},{label:'Amicus: The App Goes', lean:1}] },
+  { id:'court_carbon', type:'COURT', tag:'CLIM', months:5, reward:{cash:220, special:'ally'},
+    title:'SCOTUS: West Virginia v. Weather',
+    sides:[{label:'Amicus: The EPA Can Do That', lean:-1},{label:'Amicus: Major Questions, Minor Answers', lean:1}] },
+  { id:'court_bathtub', type:'COURT', tag:'DEF', months:4, reward:{cash:260, special:'ally'},
+    title:'Court of Federal Claims: Nine Carriers v. One Bathtub',
+    sides:[{label:'Amicus: Pay the Shipyard', lean:1},{label:'Amicus: Audit the Bathtub', lean:-1}] },
+  // ---- appropriations riders: must-pass, everyone piles in, losers get some back ----
+  { id:'approps_balloons', type:'APPROPS', tag:'DEF', months:2, reward:{cash:650},
+    title:'Approps Rider: 47 More Balloons',
+    sides:[{label:'Attach: Balloons Are Deterrence', lean:1},{label:'Strip: Deterrence Is Not Balloons', lean:-1}] },
+  { id:'approps_studies', type:'APPROPS', tag:'HLTH', months:2, reward:{cash:600},
+    title:'Approps Rider: Fund the Study of the Studies',
+    sides:[{label:'Attach: Fund It', lean:-1},{label:'Strip: Study It Later', lean:1}] },
+  { id:'approps_ports', type:'APPROPS', tag:'TRADE', months:2, reward:{cash:580},
+    title:'Approps Rider: A Port for Every State (Including Nebraska)',
+    sides:[{label:'Attach: Nebraska Deserves a Port', lean:0},{label:'Strip: Nebraska Is Landlocked', lean:0}] },
+  { id:'approps_broadband', type:'APPROPS', tag:'TECH', months:2, reward:{cash:620},
+    title:'Approps Rider: Rural Broadband, Again',
+    sides:[{label:'Attach: Wire the Prairie', lean:-1},{label:'Strip: The Prairie Has Dial-Up', lean:1}] },
+  // ---- statehouses: cheap, quick, ignored by the big shops ----
+  { id:'state_caai', type:'STATE', tag:'TECH', months:2, reward:{cash:90, inf:10},
+    title:'Sacramento: The California AI Safety Bill (Round 3)',
+    sides:[{label:'Pass: Register the Robots', lean:-1},{label:'Veto: Innovation Corridor', lean:1}] },
+  { id:'state_grid', type:'STATE', tag:'CLIM', months:1, reward:{cash:100},
+    title:'Austin: Connect the Texas Grid (To Anything)',
+    sides:[{label:'Pass: Plug It In', lean:-1},{label:'Block: Independence Means Blackouts', lean:1}] },
+  { id:'state_zoning', type:'STATE', tag:'CLIM', months:2, reward:{cash:80, inf:10},
+    title:'Tallahassee: Ban the Word “Climate” in Zoning Codes',
+    sides:[{label:'Pass: Weather Is Enough', lean:1},{label:'Block: Words Mean Things', lean:-1}] },
+  { id:'state_prop47b', type:'STATE', tag:'TAX', months:1, reward:{cash:110},
+    title:'Ballot Initiative: Prop 47B (Tax the Tax Preparers)',
+    sides:[{label:'Yes on 47B', lean:-1},{label:'No on 47B', lean:1}] },
+
   { id:'serverfarms', type:'BILL', tag:'TECH', months:3, reward:{cash:350},
     title:'American Server Farms Act',
     sides:[{label:'Pass: Subsidize the Cloud', lean:-1},{label:'Block: Clouds Can Pay Rent', lean:1}] },

@@ -280,13 +280,14 @@ function drawFight() {
   const defId = W.fightDeck.pop();
   const def = FIGHTS.find(f => f.id === defId);
   const r = def.reward;
+  const targetRival = def.target === 'rival' && W.rivals && W.rivals.length ? pick(W.rivals).short : null;
   W.fights.push({
     defId, type: def.type, tag: def.tag,
     reward: { cash: Math.round((r.cash || 0) * TUNE.fightCashMult), inf: r.inf || 0, special: r.special || null },
-    title: def.title.replace('{NOM}', genName(true)),
+    title: def.title.replace('{NOM}', genName(true)).replace('{RIVAL}', targetRival || 'Somebody'),
     monthsLeft: def.months,
     sides: def.sides.map(s => ({ label: s.label, lean: s.lean, total: 0, yours: 0, rivals: {} })),
-    rivalPicks: {}, crossed: {},
+    rivalPicks: {}, crossed: {}, targetRival, monthUsed: {},
   });
 }
 
@@ -522,8 +523,9 @@ function bestWitness(tag) {
   return [...G.scholars].filter(s => s.tag === tag).sort((a, b) => b.out - a.out)[0];
 }
 
-function testifyOdds(s, prep) {
-  return Math.max(0.35, Math.min(0.95, TUNE.testifyBase + s.out / 100 + (quirkId(s) === 'veteran' ? 0.15 : 0) + (prep ? TUNE.testifyPrepBonus : 0)));
+function testifyOdds(s, prep, f) {
+  const hearing = f && f.type === 'HEARING' ? 0.2 : 0;
+  return Math.max(0.35, Math.min(0.95, TUNE.testifyBase + s.out / 100 + (quirkId(s) === 'veteran' ? 0.15 : 0) + (prep ? TUNE.testifyPrepBonus : 0) + hearing));
 }
 function testifyPrepCost() { return specCount('comms') ? 0 : TUNE.testifyPrepCost; }
 // what's actually on the table: success scales with the fight, a flub is capped
@@ -545,7 +547,7 @@ function actTestify(fi, prep) {
     G.influence -= pc;
   }
   const { side, gain, loss } = testifyStakes(f, s);
-  const p = testifyOdds(s, prep);
+  const p = testifyOdds(s, prep, f);
   const ok = Math.random() < p;
   G.pendingNews = G.pendingNews || [];
   { const R = rec(); R.testimonies++; if (ok) R.testimonyWins++; }
@@ -560,6 +562,7 @@ function actTestify(fi, prep) {
     const cut = loss;
     addYours(side, -cut); side.total -= cut;
     s.mope = Math.max(s.mope || 0, 1);
+    if (f.type === 'HEARING') bumpConf(-3, `${s.name} flubbed a hearing on camera`);
     f.testimony = { who: s.name, ok: false, eff: -cut };
     G.pendingNews.push({ h: `${s.name.toUpperCase()} FLUBS TESTIMONY`, s: `A senator asked a question; the answer was a different question. −${cut} to “${side.label}” on ${f.title}, and a bruised ego.` });
     logLine(`📣 ${s.name} flubbed on ${f.title}: −${cut} (${Math.round(p * 100)}% odds).`);
@@ -790,10 +793,14 @@ function expertiseMult(tag) {
 
 // resolution odds: sharpened contest curve — a 2:1 influence lead wins ~85%,
 // 3:1 ~94%, but nothing is ever certain (except a walkover vs zero)
+function fightType(f) { return FIGHT_TYPES[f.type] || {}; }
+function fightK(f) { return fightType(f).k || TUNE.contestK; }
+function fightCap(f) { return fightType(f).capPerMonth || 0; }
 function winProbA(f) {
   const a = f.sides[0].total, b = f.sides[1].total;
   if (a === 0 && b === 0) return 0.5;
-  const pa = Math.pow(a, TUNE.contestK), pb = Math.pow(b, TUNE.contestK);
+  const k = fightK(f);
+  const pa = Math.pow(a, k), pb = Math.pow(b, k);
   return pa / (pa + pb);
 }
 
@@ -812,6 +819,7 @@ function rewardText(f) {
   if (r.special === 'scholar') parts.push('🎓 scholar');
   if (r.special === 'donorlead') parts.push('🤝 intro');
   if (r.special === 'absolve') parts.push('😇 amnesty');
+  if (r.special === 'ally') parts.push('⚖ ally');
   return parts.join(' + ') || '—';
 }
 
@@ -823,6 +831,7 @@ function rewardTip(f) {
   if (r.special === 'scholar') parts.push('🎓 a grateful expert joins your roster free');
   if (r.special === 'donorlead') parts.push('🤝 warm intro: a donor appears in the market at half courting cost');
   if (r.special === 'absolve') parts.push('😇 amnesty: every current donor\'s strikes drop by 1');
+  if (r.special === 'ally') parts.push(`⚖ a friend on the bench: +${Math.round(TUNE.allyBonus * 100)}% on your ${f.tag} commits, permanently`);
   return 'If your side wins: ' + parts.join(' · ') + '. The victory itself goes to the side\'s single top contributor.';
 }
 
@@ -1186,6 +1195,15 @@ function actCommit(fightIdx, sideIdx, amt) {
       logLine(`${d.name}'s whim is offended by your position on ${f.title}. (${d.strikes}/${TUNE.strikeLimit} strikes)`);
     });
   }
+  const cap = fightCap(f);
+  if (cap) {
+    f.monthUsed = f.monthUsed || {};
+    const key = G.pid || 'me';
+    const used = f.monthUsed[key] || 0;
+    if (used >= cap) return flash(`The docket is full: a rulemaking takes at most ✦${cap} per institution per month. Come back next month.`);
+    amt = Math.min(amt, cap - used);
+    f.monthUsed[key] = used + amt;
+  }
   G.influence -= amt;
   const eff = Math.round(amt * expertiseMult(f.tag));
   side.total += eff;
@@ -1453,6 +1471,14 @@ function aiLevel() { return W && W.aiLevel !== undefined ? W.aiLevel : 1; }
 function rivalAI(r) { return r.ai || DEFAULT_AI; }
 function commitRival(r, f, sideIdx, amt) {
   const s = f.sides[sideIdx];
+  const cap = fightCap(f);
+  if (cap) {
+    f.monthUsed = f.monthUsed || {};
+    const used = f.monthUsed[r.short] || 0;
+    amt = Math.min(amt, cap - used);
+    if (amt <= 0) return;
+    f.monthUsed[r.short] = used + amt;
+  }
   // a bench of their own: rivals hit harder in their pet issues
   const eff = f.tag && r.tags.includes(f.tag) ? Math.round(amt * (1 + TUNE.rivalBenchBonus)) : amt;
   s.rivals = s.rivals || {};
@@ -1487,7 +1513,17 @@ function sideTopOf(side, exceptShort) {
 // which side a rival takes in a fight, by style; -1 = sits it out
 function rivalSideChoice(r, f, leaderRow) {
   const ai = rivalAI(r);
-  const pet = !!f.tag && r.tags.includes(f.tag);
+  const ft = fightType(f);
+  // a hearing in their own name: they defend, whatever their politics
+  if (f.targetRival === r.short) return 1;
+  // statehouse fights: the federal-minded shops mostly can't be bothered
+  if (ft.rivalSkip) {
+    f.rivalSkips = f.rivalSkips || {};
+    const skipP = f.type === 'STATE' ? TUNE.stateRivalSkip : ft.rivalSkip;
+    if (f.rivalSkips[r.short] === undefined) f.rivalSkips[r.short] = Math.random() < skipP ? 1 : 0;
+    if (f.rivalSkips[r.short] && !(rivalStake(f.sides[0], r) > 0 || rivalStake(f.sides[1], r) > 0)) return -1;
+  }
+  const pet = (!!f.tag && r.tags.includes(f.tag)) || !!ft.allPet;
   const pref = f.sides.findIndex(s => r.align === 0 ? s.lean === 0 : s.lean * r.align > 0);
   if (ai.style === 'purist' && aiLevel() > 0 && !pet) return pref;   // never crosses, never dabbles
   let sideIdx = pref;
@@ -1573,11 +1609,11 @@ function rivalCommits() {
     // become victories, not a monument
     const surplus = r.chest / Math.max(1, income);
     const t = Math.min(0.92, TUNE.aiTargetOdds + (ai.aggression - 1) * 0.1 + (level >= 3 ? 0.06 : 0) + Math.min(0.15, Math.max(0, surplus - 2) * 0.04));
-    const ratio = Math.pow(t / (1 - t), 1 / TUNE.contestK);
     const plans = [];
     W.fights.forEach(f => {
       const sideIdx = rivalSideChoice(r, f, leaderRow);
       if (sideIdx < 0) return;
+      const ratio = Math.pow(t / (1 - t), 1 / fightK(f));
       const s = f.sides[sideIdx], opp = f.sides[1 - sideIdx];
       const me = ((s.pool || {})[r.short]) || r.short;
       const mine = (s.rivals || {})[me] || 0;
@@ -1587,9 +1623,9 @@ function rivalCommits() {
       const forOdds = Math.max(0, Math.ceil((opp.total + pad) * ratio) - s.total);
       const forCredit = Math.max(0, topOther + Math.ceil(pad / 2) - mine);
       const need = Math.max(forOdds, forCredit, mine > 0 ? 0 : 5);
-      const pet = !!f.tag && r.tags.includes(f.tag);
+      const pet = (!!f.tag && r.tags.includes(f.tag)) || !!fightType(f).allPet || f.targetRival === r.short;
       const rw = fightReward(f);
-      let value = (f.marquee ? 2 : 1) * (pet ? 1.3 : 1) * (0.8 + Math.min(0.6, (rw.cash || 0) / 500));
+      let value = (f.marquee ? 2 : 1) * (pet ? 1.3 : 1) * (f.targetRival === r.short ? 1.5 : 1) * (0.8 + Math.min(0.6, (rw.cash || 0) / 500));
       // grudges: appetite for sides the human leader tops, for a rival leader's
       // sides, and for anyone this rival has a vendetta against
       const leadAmt = lead ? contribOf(opp, lead.pid || null) : 0;
@@ -1710,6 +1746,7 @@ function monthWorldPre(newsFor) {
     W.fights.filter(f => f.monthsLeft <= 0).forEach(f => resolveFight(f, newsFor));
     W.fights = W.fights.filter(f => f.monthsLeft > 0);
   }
+  W.fights.forEach(f => f.monthUsed = {});
 
   // 7.5 the leaderboard has a story: lead changes make the paper
   {
@@ -2056,6 +2093,15 @@ function resolveFight(f, newsFor) {
     const r = W.rivals.find(x => x.short === topRival);
     if (r) { r.victories = (r.victories || 0) + 1; r.vByTag = r.vByTag || {}; r.vByTag[f.tag] = (r.vByTag[f.tag] || 0) + 1; bumpRivalConf(r, TUNE.rivalConfWin); }
   }
+  // a hearing in a rival's name: the probe side winning rattles their donors
+  if (f.targetRival && winner === f.sides[0]) {
+    const r = W.rivals.find(x => x.short === f.targetRival);
+    if (r) {
+      bumpRivalConf(r, -10);
+      r.dents = r.dents || []; r.dents.push({ n: 0, conf: -10, why: `the ${f.title.split(':')[0].toLowerCase()}`, m: W.month });
+      newsAll(newsFor, { h: `${r.short.toUpperCase()} HAULED BEFORE THE COMMITTEE`, s: `The probe finds “irregularities,” a word that does a lot of work. ${r.short}'s donors are calling. Their confidence −10.` });
+    }
+  }
   // rivals who carried a third or more of the losing pile feel it at home
   Object.entries(loser.rivals || {}).forEach(([short, amt]) => {
     if (loser.total > 0 && amt >= loser.total * 0.3) {
@@ -2111,6 +2157,10 @@ function resolveFight(f, newsFor) {
     } else if (R.special === 'absolve') {
       G.donors.forEach(d => d.strikes = Math.max(0, d.strikes - 1));
       gains.push('a grateful town forgets old grudges (all donor strikes −1)');
+    } else if (R.special === 'ally') {
+      G.allies = G.allies || {};
+      G.allies[f.tag] = Math.min(3, (G.allies[f.tag] || 0) + 1);
+      gains.push(`a friend on the bench: +${Math.round(TUNE.allyBonus * 100)}% on your ${f.tag} commits, permanently`);
     }
       sub += ` ${creditLine} The spoils: ${gains.join('; ')}.`;
       news.push({ h: `${upset ? 'UPSET: ' : ''}${f.title.toUpperCase()}${banks ? ` — VICTORY FOR ${tank().short.toUpperCase()}` : ' — RESOLVED'}`, s: sub, big: banks, meter });
@@ -2140,7 +2190,9 @@ function resolveFight(f, newsFor) {
       logLine(`${s.name} quit after another ${f.tag} defeat — morale matters.`);
     });
     if (bench.length > quitters.length) logLine(`Your ${f.tag} bench is demoralized: output −${Math.round((1 - TUNE.moraleMult) * 100)}% for ${TUNE.moraleMonths} months (a ${f.tag} win snaps them out of it).`);
-      sub += ` ${creditLine} ${tank().short} spent ${lost} influence on the losing side. A fellow calls it “directionally correct.”`;
+      const refund = fightType(f).refund ? Math.round(lost * fightType(f).refund) : 0;
+      if (refund) G.influence += refund;
+      sub += ` ${creditLine} ${tank().short} spent ${lost} influence on the losing side${refund ? ` — riders get traded: ✦${refund} comes back` : ''}. A fellow calls it “directionally correct.”`;
       news.push({ h: `${upset ? 'UPSET: ' : ''}${f.title.toUpperCase()} — RESOLVED`, s: sub, meter });
       logLine(`LOSS: ${f.title}. ${lost} influence down the drain.`);
     } else {
@@ -2609,12 +2661,12 @@ function renderFights() {
     const pctA = Math.max(2, Math.min(98, pWin));
     return `
       <div class="card fightcard">
-        <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}">${f.type}</span><span>${f.title}</span></div>
+        <div class="cardhead fight">${iconImg('fight_' + f.defId, 'sm')}<span class="ftype ${f.type}" title="${fightType(f).tip || ''}">${f.type}</span><span>${f.title}</span></div>
         <div class="cardbody">
-          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}</div>
+          <div class="fightmeta">${tagChip(f.tag)} <span class="chip">⏳ ${f.monthsLeft} mo</span> <span class="chip gold" title="${rewardTip(f)}">🏆 ${rewardText(f)}</span>${expertiseChip(f.tag)}${fightCap(f) ? ` <span class="chip" title="Rulemaking docket: at most ✦${fightCap(f)} per institution per month. Patient positions beat dumps.">📋 ✦${(f.monthUsed || {})[G.pid || 'me'] || 0}/${fightCap(f)} this month</span>` : ''}${f.targetRival ? ` <span class="chip vend" title="${f.targetRival} is in the hot seat: if the probe side wins, their donor confidence drops 10. They will defend themselves.">🎯 ${f.targetRival.toUpperCase()}</span>` : ''}</div>
           ${testimonyReady(f) ? (() => {
             const w = bestWitness(f.tag), st = testifyStakes(f, w), pc = testifyPrepCost();
-            const p0 = Math.round(testifyOdds(w) * 100), p1 = Math.round(testifyOdds(w, true) * 100);
+            const p0 = Math.round(testifyOdds(w, false, f) * 100), p1 = Math.round(testifyOdds(w, true, f) * 100);
             return `<div class="pline"><button class="btn tiny" data-act="testify" data-f="${fi}" title="${w.name} takes the stand for “${st.side.label}”: ${p0}% they command the room (+${st.gain} — 1.5× their output, or a tenth of the other side's pile, whichever is bigger); otherwise −${st.loss} (${Math.round(TUNE.testifyFlubPct * 100)}% of your stake, never more than their output) and a bruised ego.">📣 Testify: ${w.name} · ${p0}% for +${st.gain}, else −${st.loss}</button> <button class="btn tiny" data-act="testify" data-f="${fi}" data-prep="1" ${G.influence < pc ? 'disabled' : ''} title="Murder boards and a haircut: +${Math.round(TUNE.testifyPrepBonus * 100)}% odds${pc ? ` for ✦${pc}` : ' — free, your Comms Director runs prep'}">Prep & testify (${pc ? `✦${pc}, ` : ''}${p1}%)</button></div>`;
           })() : ''}
           ${f.testimony ? `<div class="pline ${f.testimony.ok ? 'ok' : 'warn'}">📣 ${f.testimony.who} ${f.testimony.ok ? 'commanded the hearing room' : 'flubbed the hearing'}: ${f.testimony.eff > 0 ? '+' : ''}${f.testimony.eff}</div>` : ''}

@@ -178,6 +178,33 @@ ICONS = {
     'ops_7': 'a cheerful technician tangled in AV cables holding a projector remote',        # AV Guy (Indispensable)
     'ops_8': 'a wrangler with a whistle herding a line of tiny identical suited interns',    # Intern Wrangler
 
+    # ---- the whales (donors 36-38) ----
+    'donor_alkhazar':  'a golden desert palace dome with an oil derrick and a sovereign seal on a velvet cushion',
+    'donor_vandermeer': 'a stern bronze bust of a mustached industrialist on a marble plinth engraved with a dollar sign',
+    'donor_primedaf':  'a glowing server rack shaped like a piggy bank with a hoodie draped over it',
+
+    # ---- fight classes 31-50 ----
+    'fight_hear_algo':       'a witness table with a microphone and a smartphone wearing a tiny blindfold',
+    'fight_hear_probe':      'a wooden gavel resting on a thick stack of subpoena envelopes with red seals',
+    'fight_hear_eggs':       'a carton of eggs on a witness stand with a small price tag on each egg',
+    'fight_hear_balloon':    'a white balloon seated at a witness table with a microphone',
+    'fight_rule_crypto':     'a golden coin sprouting green vegetable leaves inside a stamped federal register book',
+    'fight_rule_methane':    'a dairy cow with a small brass parking meter strapped to its side',
+    'fight_rule_drugs':      'a pill bottle and a calculator shaking hands across a negotiation table',
+    'fight_rule_tariffcalc': 'a chunky desk calculator with a tiny cargo ship on its display',
+    'fight_court_agency':    'a marble courthouse facade with a filing cabinet standing on the steps',
+    'fight_court_tiktank':   'a smartphone in a suit standing at a courtroom lectern',
+    'fight_court_carbon':    'a storm cloud with a judge wig raining on a small smokestack',
+    'fight_court_bathtub':   'a bathtub with tiny aircraft carriers, sitting inside a courtroom witness box',
+    'fight_approps_balloons':  'a bundle of white balloons tied to a stack of hundred dollar bills',
+    'fight_approps_studies':   'a magnifying glass examining a smaller magnifying glass over a research paper',
+    'fight_approps_ports':     'a cargo ship crane lowering a shipping container onto a cornfield',
+    'fight_approps_broadband': 'a telephone pole in a wheat field with a glowing router bolted to it',
+    'fight_state_caai':      'a friendly robot filling out a paper registration form at a california statehouse desk',
+    'fight_state_grid':      'a lone electrical plug reaching toward a star-shaped outlet on a wooden fence',
+    'fight_state_zoning':    'a zoning map with a big word crossed out by a red marker',
+    'fight_state_prop47b':   'a ballot box with a green visor and a tax form sticking out of the slot',
+
     # ---- report-card badges (10), keys match BADGES in data.js ----
     'badge_sandbagger': 'a round bronze award medal on a striped ribbon, embossed with a tortoise crossing a finish line first',
     'badge_amateur':    'a round tin award medal on a striped ribbon, embossed with a dunce cap sitting on a podium',
