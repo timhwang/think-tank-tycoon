@@ -50,7 +50,12 @@ const TUNE = {
   aiBuffer: 12,          // ...padded per month left, since the other side keeps piling on
   aiMaxShare: 0.6,       // no single new fight gets more than this share of a rival's chest
   aiChestMonths: 6,      // a chest bigger than this many months' income gets spent regardless
-  aiIncomeMult: 1.1,     // thinking rivals (Medium+) earn this much more per month than dice rivals
+  aiIncomeMult: 1.0,     // thinking rivals (Medium+) earn this much more per month than dice rivals
+  rivalTrackPct: 0.3,    // rival income never falls below this share of the top human's monthly production...
+  rivalTrackStep: 0.05,  // ...minus this on Easy, plus this per tier above Medium
+  rivalBenchBonus: 0.15, // rivals have benches too: commits in their pet issues hit this much harder
+  aiPoolLevel: 2,        // rivals pool credit from this difficulty level up (0 Easy … 3 Expert)
+  aiDenyLevel: 2,        // ...and spend the whole chest to deny the human leader credit from this level up
   courtCostMult: 1.5,    // global scaler on donor courting costs
   scholarOutMult: 1.08,  // global scaler on scholar influence output
   electionMonth: 22,     // Jan 2027 + 22 months = Election Night, Nov 2028
