@@ -50,7 +50,8 @@ const TUNE = {
   aiBuffer: 12,          // ...padded per month left, since the other side keeps piling on
   aiMaxShare: 0.6,       // no single new fight gets more than this share of a rival's chest
   aiChestMonths: 6,      // a chest bigger than this many months' income gets spent regardless
-  aiIncomeMult: 1.1,     // thinking rivals (Medium+) earn this much more per month than dice rivals
+  aiIncomeByLevel: [1.15, 1.25, 1.3, 1.4], // thinking rivals' income multiplier by difficulty (Easy … Expert)
+  aiDiceLevel: -1,       // difficulty levels at or below this roll dice instead of thinking (−1: nobody)
   rivalTrackPct: 0.3,    // rival income never falls below this share of the top human's monthly production...
   rivalTrackStep: 0.05,  // ...minus this on Easy, plus this per tier above Medium
   rivalBenchBonus: 0.15, // rivals have benches too: commits in their pet issues hit this much harder
@@ -230,10 +231,10 @@ const AI_STYLES = {
 };
 const AI_LEVELS = { Easy: 0, Medium: 1, Hard: 2, Expert: 3 };
 const AI_LEVEL_TEXT = {
-  Easy:   'Rivals roll dice: fixed spending weights, no memory, no plan.',
-  Medium: 'Rivals think: they price every fight, fund the cheapest victories, and bank war chests for the big votes.',
-  Hard:   'Rivals also poach with aim — your best scholar in their issue — and adapt to the fields they keep losing.',
-  Expert: 'All of that, with sharper target odds and a bigger appetite for whoever leads.',
+  Easy:   'Rivals think — they price every fight, fund the cheapest victories, and bank war chests — but they raise less and hold no grudges.',
+  Medium: 'Rivals think and raise real money: their income tracks the leading institution’s output.',
+  Hard:   'Rivals also poach with aim (your best scholar in their issue), adapt to the fields they keep losing, pool credit two at a time, and spend whole chests to deny the leader.',
+  Expert: 'All of that, with sharper target odds, the deepest pockets, and a bigger appetite for whoever leads.',
 };
 
 // Always-on NPC rival, never selectable.

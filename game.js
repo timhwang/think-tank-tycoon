@@ -1525,9 +1525,10 @@ function rivalSideChoice(r, f, leaderRow) {
   }
   const pet = (!!f.tag && r.tags.includes(f.tag)) || !!ft.allPet;
   const pref = f.sides.findIndex(s => r.align === 0 ? s.lean === 0 : s.lean * r.align > 0);
-  if (ai.style === 'purist' && aiLevel() > 0 && !pet) return pref;   // never crosses, never dabbles
+  const thinking = aiLevel() > TUNE.aiDiceLevel;
+  if (ai.style === 'purist' && thinking && !pet) return pref;   // never crosses, never dabbles
   let sideIdx = pref;
-  if (sideIdx < 0 && aiLevel() > 0) {
+  if (sideIdx < 0 && thinking) {
     if (ai.style === 'dealmaker') sideIdx = f.sides[0].total >= f.sides[1].total ? 0 : 1;      // rides the favorite
     else if (ai.style === 'insurgent') sideIdx = f.sides[0].total <= f.sides[1].total ? 0 : 1; // hunts upsets
     else if (ai.style === 'mirror' && leaderRow && leaderRow.short !== r.short) {              // copies the leader
@@ -1544,7 +1545,7 @@ function rivalSideChoice(r, f, leaderRow) {
   // a stake already placed is never abandoned
   if (sideIdx >= 0 && !pet) {
     f.rivalSkips = f.rivalSkips || {};
-    if (f.rivalSkips[r.short] === undefined) f.rivalSkips[r.short] = Math.random() < TUNE.rivalFocus * (aiLevel() === 0 ? 1 : 0.5 + ai.focus) ? 1 : 0;
+    if (f.rivalSkips[r.short] === undefined) f.rivalSkips[r.short] = Math.random() < TUNE.rivalFocus * (thinking ? 0.5 + ai.focus : 1) ? 1 : 0;
     if (f.rivalSkips[r.short] && !(rivalStake(f.sides[sideIdx], r) > 0)) sideIdx = -1;
   }
   return sideIdx;
@@ -1592,9 +1593,9 @@ function rivalCommits() {
     const income = Math.round(Math.max(base, tracked) * (0.85 + Math.random() * 0.3));
     r.income = income;
     r.tracking = tracked > base;
-    if (level === 0) { rivalCommitsDice(r, Math.round(income * (0.9 + Math.random() * 0.2)), lead, hot, leaderRow); return; }
+    if (level <= TUNE.aiDiceLevel) { rivalCommitsDice(r, Math.round(income * (0.9 + Math.random() * 0.2)), lead, hot, leaderRow); return; }
     const ai = rivalAI(r);
-    r.chest = (r.chest || 0) + Math.round(income * TUNE.aiIncomeMult);
+    r.chest = (r.chest || 0) + Math.round(income * (TUNE.aiIncomeByLevel[level] || 1));
 
     // what to deploy this month: impatient shops spend as it comes, patient
     // ones bank for closing months and election season — never past the vote,
@@ -1673,6 +1674,7 @@ function rivalCommits() {
 
 // the town reads the rivals' books: hoarding and all-in months make the paper
 function rivalTelegraphs(newsFor) {
+  if (aiLevel() <= TUNE.aiDiceLevel) return;
   if (!W.trackNews && W.rivals.some(r => r.tracking)) {
     W.trackNews = true;
     newsAll(newsFor, { h: 'THE TOWN NOTICES: RIVAL FUNDRAISING SURGES', s: 'Somebody’s monthly output is the talk of every development office in Washington. From here on, rival war chests track the leading institution’s production — the bigger you build, the harder they raise.' });
@@ -1705,7 +1707,7 @@ function rivalTelegraphs(newsFor) {
 function rivalTip(r) {
   const ai = rivalAI(r), st = AI_STYLES[ai.style] || AI_STYLES.establishment;
   const parts = [`${st.label}: ${st.blurb}`];
-  if (aiLevel() === 0) parts.push('Easy: rolls dice — fixed weights, no memory');
+  if (aiLevel() <= TUNE.aiDiceLevel) parts.push('rolls dice — fixed weights, no memory');
   else {
     parts.push(`war chest ✦${r.chest || 0} (income ~✦${r.income || Math.round(r.budget)}/mo)`);
     const funded = Object.values(r.plan || {}).map(p => `${p.title.split(':')[0]} ✦${p.amt}`);
@@ -1718,7 +1720,7 @@ function rivalTip(r) {
 
 // a Gov Relations Lead reads the rivals' intentions on the fight cards
 function intelText(f, si) {
-  if (aiLevel() < 1 || !specCount('govrel')) return '';
+  if (aiLevel() <= TUNE.aiDiceLevel || !specCount('govrel')) return '';
   const names = W.rivals.filter(r => (r.eyeing || []).some(e => e.title === f.title && e.side === si)).map(r => `${r.short} (✦${r.chest || 0} banked)`);
   return names.length ? `<div class="pline dim intel" title="Your Gov Relations Lead hears things: these rivals are weighing this side for a future month.">👁 eyeing this side: ${names.join(', ')}</div>` : '';
 }
@@ -2703,7 +2705,7 @@ function renderReport() {
     const oppo = !row.you && !G.over ? `<button class="btn tiny oppo" data-act="oppo" data-target="${row.human ? row.pid : row.short}" title="Commission an oppo file on ${row.short} (✦${oppoCost()}, ${Math.round(oppoOdds() * 100)}% to land): their donor confidence ${TUNE.oppoHit}, or it blows back on yours (${TUNE.oppoBlowback}). One a month; each file costs ✦${TUNE.oppoStep} more than the last.${row.human ? '' : ' Either way they take it personally.'}" ${G.oppoMonth === W.month || G.influence < oppoCost() ? 'disabled' : ''}>📁</button>` : '';
     return `<tr class="${row.you ? 'you' : ''}">
       <td class="rank">${i + 1}</td>
-      <td><span ${rival ? `class="rivalname" title="${rivalTip(rival)}"` : ''}>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}</span>${row.pname ? ` <span class="dim">· ${row.pname}</span>` : ''}${rival && aiLevel() >= 1 && (rival.chest || 0) >= (rival.income || rival.budget) * 3 ? ` <span class="chip" title="War chest: ✦${rival.chest} banked. Expect it in a closing month.">🏦</span>` : ''}${row.you ? (i === 0 && row.v > 0 ? ' ★ <span title="You lead the board: the whole town is spending harder and counter-bidding the sides you top.">🔥</span>' : ' ★') : (row.human && i === 0 && row.v > 0 ? ' 🔥' : '')}</td>
+      <td><span ${rival ? `class="rivalname" title="${rivalTip(rival)}"` : ''}>${iconImg('tank_' + tankIdByShort(row.short), 'sm')} ${row.short}</span>${row.pname ? ` <span class="dim">· ${row.pname}</span>` : ''}${rival && aiLevel() > TUNE.aiDiceLevel && (rival.chest || 0) >= (rival.income || rival.budget) * 3 ? ` <span class="chip" title="War chest: ✦${rival.chest} banked. Expect it in a closing month.">🏦</span>` : ''}${row.you ? (i === 0 && row.v > 0 ? ' ★ <span title="You lead the board: the whole town is spending harder and counter-bidding the sides you top.">🔥</span>' : ' ★') : (row.human && i === 0 && row.v > 0 ? ' 🔥' : '')}</td>
       <td>${leanChip(row.align)}</td>
       <td class="amt">${row.v}</td>
       <td class="amt dim">${budget}</td>
