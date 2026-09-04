@@ -1211,6 +1211,7 @@ const CRISIS_WHEN = {
   smear: () => true,
   center: () => G.donors.some(d => !d.lapsing) && G.cash > 250,
   union: () => G.ops.length >= 1,
+  loudmouth: () => G.scholars.length >= 1 && activeDonors().length >= 1,
 };
 
 function offendedText(list) {
@@ -1260,6 +1261,18 @@ function drawCrisis(news) {
     c.t.offended = angry.map(d => d.id);
     c.n.OFFENDED = offendedText(angry);
   }
+  // the loudmouth: prefer a scholar who's on air a lot, and a funder they'd offend
+  if (def.id === 'loudmouth') {
+    const media = G.scholars.filter(s => ['cable', 'feud', 'substack', 'book'].includes(quirkId(s)));
+    const s = pick(media.length ? media : G.scholars);
+    const pool = activeDonors();
+    const opp = pool.filter(d => (s.lean || 0) !== 0 && d.lean * (s.lean || 0) < 0);
+    const dn = pick(opp.length ? opp : pool);
+    c.t.scholar = s.id; c.n.SCHOLAR = s.name;
+    c.t.donor = dn.id; c.n.DONOR = dn.name;
+    const cap = dn.renewals ? 1 : TUNE.strikeLimit;
+    c.n.DONORWALK = dn.strikes >= cap - 1 ? ' — ⚠ they would walk' : '';
+  }
   G.crisis = c;
   news.push({ h: `BUGLE EXTRA: ${crisisSub(def.title)}`, s: 'A decision is required before next month can begin.' });
   logLine(`CRISIS: ${crisisSub(def.title)} — decide before the next END MONTH.`);
@@ -1287,7 +1300,7 @@ function forceCrisis(id, news) {
 
 function crisisSub(text) {
   if (!G.crisis) return text;
-  return text.replace(/\{(SCHOLAR|TOP|DIVA|OPS|DONOR_B|DONOR|RIVAL|OFFENDED|AISLE|NERVOUS)\}/g, (m, k) => G.crisis.n[k] || '(someone)');
+  return text.replace(/\{(SCHOLAR|TOP|DIVA|OPS|DONOR_B|DONORWALK|DONOR|RIVAL|OFFENDED|AISLE|NERVOUS)\}/g, (m, k) => G.crisis.n[k] || (k === 'DONORWALK' ? '' : '(someone)'));
 }
 
 const CRISIS_FX = {
@@ -1357,6 +1370,25 @@ const CRISIS_FX = {
     c => { G.influence += 25; const d = (c.t.nervous && G.donors.find(x => x.id === c.t.nervous)) || pick(activeDonors()); if (d) d.strikes++;
       return `You backed the insurgent: ✦25, and ${d ? d.name : 'a donor'} is nervous about it.`; },
     () => { bumpConf(4, 'stayed above the primary'); return 'You stayed above it. The base approves; the campaigns forget you exist.'; },
+  ],
+  loudmouth: [
+    c => { const s = G.scholars.find(x => x.id === c.t.scholar); if (s) s.mope = Math.max(s.mope || 0, 2);
+      return `${c.n.SCHOLAR} reads a statement containing the word “if.” ${c.n.DONOR} accepts it, barely; the scholar sulks for two months.`; },
+    c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) d.strikes++;
+      const s = G.scholars.find(x => x.id === c.t.scholar); if (s) s.out += 2;
+      G.influence += 20; bumpConf(-3, `stood by ${c.n.SCHOLAR} against ${c.n.DONOR}`);
+      return `You stand by ${c.n.SCHOLAR}. The clip mints ✦20 and a fan base; ${c.n.DONOR} takes offense, and the rest of the base notes who you chose.`; },
+    c => { G.scholars = G.scholars.filter(x => x.id !== c.t.scholar); rec().scholarsLost++;
+      const d = G.donors.find(x => x.id === c.t.donor); let grew = 0;
+      if (d) { grew = Math.round(d.grant * 0.15); d.grant += grew; d.strikes = Math.max(0, d.strikes - 1); }
+      bumpConf(TUNE.confFire, `let ${c.n.SCHOLAR} go to placate ${c.n.DONOR}`);
+      return `${c.n.SCHOLAR} is gone by lunch. ${c.n.DONOR} sends flowers${grew ? ` and ${fmtMoney(grew)}/mo more` : ''}; the staff sends nothing.`; },
+    c => { const d = G.donors.find(x => x.id === c.t.donor); if (d) d.strikes = Math.max(0, d.strikes - 1);
+      if (Math.random() < 0.5 && drawDonorToMarket()) {
+        const nd = G.donorMarket[G.donorMarket.length - 1]; nd.cost = Math.ceil(nd.cost / 2); nd.lead = true; delete nd.from; delete nd.fromPid;
+        return `The dinner is tense, then fine. ${c.n.DONOR} stays — and ${nd.name}, who loved the clip, turns up in the donor market at half price.`;
+      }
+      return `The dinner is tense, then fine. ${c.n.DONOR} stays. Nobody new calls; the salmon was good.`; },
   ],
   union: [
     () => { G.ops.forEach(o => o.salary += 1); return 'The union is recognized. Every ops salary rises $1k/mo.'; },

@@ -702,6 +702,14 @@ const CRISES = [
       { label:'Build the Center', cash:120, hint:'Their grant rises $30k/mo and the cycle extends 6 months' },
       { label:'Decline politely', hint:'{DONOR} takes a strike’s worth of offense' },
     ] },
+  { id:'loudmouth', title:'{SCHOLAR} CALLS {DONOR} “A GRIFT” ON AIR',
+    body:'Asked a softball about {DONOR}’s pet cause, {SCHOLAR} answered a different question, at length, on camera. The clip has two million views and a remix. {DONOR}’s office has called twice; the second call was shorter.',
+    choices: [
+      { label:'Make them apologize', hint:'{SCHOLAR} reads a statement and sulks (−25% output for 2 months); {DONOR} is mollified' },
+      { label:'Stand by them', hint:'{DONOR} takes a strike{DONORWALK}; the clip mints ✦20 and {SCHOLAR}’s output rises +2 for good; the rest of the base notes who you chose (confidence −3)' },
+      { label:'Let them go', hint:'{SCHOLAR} leaves, no severance; {DONOR} sends flowers — their grant grows 15% and a strike is forgiven' },
+      { label:'Host a “civil discourse” dinner', cash:40, hint:'Everyone stays, {DONOR} calms down (a strike forgiven); 50%: a funder who loved the clip appears in the market as a warm intro' },
+    ] },
   { id:'endorse', title:'PRIMARY SEASON: A CAMPAIGN WANTS YOUR NAME', scripted:true,
     body:'It is March 2028 and a presidential campaign would like your institution on a letter. Another campaign has heard about the letter.',
     choices: [
